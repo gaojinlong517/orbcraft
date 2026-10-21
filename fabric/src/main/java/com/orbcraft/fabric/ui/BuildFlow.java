@@ -26,9 +26,10 @@ import com.orbcraft.core.target.TargetException;
 import com.orbcraft.core.target.TargetPlan;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.Services;
-import com.orbcraft.fabric.store.OrbcraftStore;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
@@ -207,9 +208,9 @@ public final class BuildFlow {
      * 极端情况下（同一 tick 内两次请求）可能出现「生效了但没扣」，那是白送一次，
      * 比扣了不生效安全得多。
      *
-     * <p>扣额度必须走 {@code OrbcraftStore.useTarget}：{@code TargetAllowance.use} 返回的是
-     * 新实例，存回与立即落盘都在 S4 那边做。这里自己调 {@code use} 再把新实例揣在会话里，
-     * 跨重启就丢 —— 那是「额度回来了」这类投诉的根因。
+     * <p>扣额度必须「取 → use → install」三步走 {@code OrbcraftRuntime}：{@code use} 返回的是
+     * 新实例，不 install 回去这次扣减就等于没发生。把新实例只揣在会话里，跨重启就丢 ——
+     * 那是「额度回来了」这类投诉的根因。
      */
     public static void useTarget(ServerPlayer player, String cardId) {
         BuildSeat seat = require(player);
@@ -238,8 +239,8 @@ public final class BuildFlow {
             BuildScreens.toast(player, "「" + card + "」不适用于" + kind.zh(), ChatFormatting.RED);
             return;
         }
-        long today = OrbcraftStore.todayEpochDay();
-        int left = OrbcraftStore.targetsOf(seat.ownerKey()).remaining(seat.ownerKey(), today, kind);
+        long today = BuildRuntime.todayEpochDay();
+        int left = OrbcraftRuntime.allowanceOf(seat.ownerKey()).remaining(seat.ownerKey(), today, kind);
         if (left <= 0) {
             BuildScreens.toast(player, kind.zh() + "今天的定向额度已用完", ChatFormatting.RED);
             return;
@@ -257,7 +258,11 @@ public final class BuildFlow {
             BuildScreens.toast(player, "定向卡没生效：" + e.getMessage(), ChatFormatting.RED);
             return;
         }
-        Optional<TargetAllowance> after = OrbcraftStore.useTarget(seat.ownerKey(), today, kind);
+        // TargetAllowance.use 返回新实例、不改原实例：不 install 回去，这次扣减就等于没发生。
+        // 存回的位置由运行期单例统一，S2 不持有账本。
+        Optional<TargetAllowance> after = OrbcraftRuntime.allowanceOf(seat.ownerKey())
+                .use(seat.ownerKey(), today, kind);
+        after.ifPresent(ledger -> OrbcraftRuntime.installAllowance(seat.ownerKey(), ledger));
         if (after.isEmpty()) {
             // 上面的 remaining 已经挡过一次，走到这里说明并发写坏了账本 —— 要报警
             LOG.warn("[orbcraft/build] 定向卡已生效但额度扣减失败：{} {}", seat.ownerKey(), card.id());
@@ -353,7 +358,7 @@ public final class BuildFlow {
                 .withAltar(seat.onAltar());
         IncubationService.Preview result;
         try {
-            result = OrbcraftStore.hatch().preview(submit);
+            result = OrbcraftRuntime.hatch().preview(submit);
         } catch (RuntimeException e) {
             LOG.error("[orbcraft/build] 预览失败", e);
             BuildScreens.toast(player, "预览算不出来：" + e.getMessage(), ChatFormatting.RED);
@@ -397,12 +402,19 @@ public final class BuildFlow {
             return;
         }
 
-        long now = OrbcraftStore.nowTick();
+        MinecraftServer server = player.level().getServer();
+        if (server == null) {
+            // 命令只能在服务端跑，拿不到 server 说明状态已经坏了；此时提交会写进一个
+            // 没有时钟的账本（startTick=0），进度条会显示成一个荒谬的数字
+            BuildScreens.toast(player, "服务器还没准备好，稍后再试一次", ChatFormatting.RED);
+            return;
+        }
+        long now = OrbcraftRuntime.nowTick(server);
         // lastActiveTick 传 now：玩家此刻正在敲命令，他就是活跃的。
         // 离线封顶只对「重启后恢复的旧票据」有意义，不该拿它削减在线玩家刚造的球。
         HatchTicket ticket;
         try {
-            ticket = OrbcraftStore.hatch().submit(now, now, pending);
+            ticket = OrbcraftRuntime.hatch().submit(now, now, pending);
         } catch (HatchException e) {
             BuildScreens.toast(player, "造不出来：" + e.getMessage(), ChatFormatting.RED);
             seat.clearPending();
@@ -428,8 +440,9 @@ public final class BuildFlow {
             player.drop(orbStack, false);
         }
         seat.endSession();
-        // submit 是唯一扣配额的地方：等 5 分钟定时保存，玩家在这期间崩服就等于白拿一次
-        OrbcraftStore.saveNow(player.getUUID());
+        // 这里不直接落盘：submit 是唯一扣配额的地方，落盘必须紧跟着它发生，
+        // 但那根钩子归 S4（它持有存档布局）。主线会在运行期扣减路径上接，
+        // 跨包调 store 会让 S2 的编译依赖覆盖别人的包。
         BuildScreens.toast(player, "造好了：" + ticket.spec().displayName() + " · 充能 "
                 + ticket.totalSeconds() + " 秒"
                 + (stored ? " · 球已放进背包" : " · 背包满了，球掉在脚下"), ChatFormatting.GREEN);

@@ -1,22 +1,24 @@
 package com.orbcraft.fabric.ui;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
 import com.orbcraft.fabric.contract.PlayerStore;
-import com.orbcraft.fabric.store.OrbcraftStore;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
  * 构筑席位的登记处 —— 只管「一次进行中的构筑」这份纯内存状态。
  *
  * <p><b>这里刻意不持有 {@code IncubationService}，也不持有定向卡账本。</b>
- * 那两样的唯一真相在 {@code OrbcraftStore}（S4）：它登录时 {@code restore}、定时落盘，
- * 并且在 {@code SERVER_STARTED} 时<b>换掉</b>孵化实例（同一 JVM 换存档时必须换）。
- * S2 要是自己再 {@code new} 一个，submit 就把配额扣在 A 账本上、S5 的 tick 推 B 账本，
- * 症状是「球永远是 0%」或者「配额明明满了还能造」—— 而且两份代码各自都自测通过。
+ * 那两样是运行期单例，归 {@link OrbcraftRuntime}（主线所有）。孵化服务的状态在实例里、
+ * 不在库里，S2 自己再 {@code new} 一个就是两套互不相干的票据表：submit 进的票在 A，
+ * S1 投掷时在 B 里查不到，球永远 0% 而且不报错。
  *
  * <p><b>席位按 ownerKey（UUID，来自 {@link PlayerStore#ownerKeyOf}）做键</b>，
  * 不按 {@code ServerPlayer} 实例：玩家过传送门或重登都会换实例，用实例做键会让
@@ -24,7 +26,7 @@ import net.minecraft.server.level.ServerPlayer;
  *
  * <p><b>为什么席位可以回收、额度不能</b>：席位只是「这一次选到哪张牌」，
  * 纯内存、丢了不影响存档；额度是「今天已经用掉的次数」，丢了就是给玩家退额度。
- * 所以回收只针对席位，额度在 S4 的会话里。
+ * 所以回收只针对席位，额度在运行期单例里。
  */
 public final class BuildRuntime {
 
@@ -39,8 +41,9 @@ public final class BuildRuntime {
     /** 取（必要时创建）该玩家的构筑席位。 */
     static synchronized BuildSeat seat(ServerPlayer player) {
         String ownerKey = PlayerStore.ownerKeyOf(player.getUUID());
-        // 用 S4 的「现在」而不是自己去取世界时间：席位的空闲判定与票据进度必须同一个时钟
-        long now = OrbcraftStore.nowTick();
+        // 与票据进度共用同一个「现在」：席位空闲判定用自己的时钟，就会出现
+        // 「玩家看着还有构筑，实际上已经被判空闲收回」这种只在跨维度时复现的怪事
+        long now = nowTick(player);
         BuildSeat seat = SEATS.get(ownerKey);
         if (seat == null) {
             purgeIdle(now);
@@ -49,6 +52,26 @@ public final class BuildRuntime {
         }
         seat.touch(now);
         return seat;
+    }
+
+    /** 玩家所在服务器的 game time；服务端未就绪时返回 0（此时也敲不了命令）。 */
+    static long nowTick(ServerPlayer player) {
+        MinecraftServer server = player.level().getServer();
+        return server == null ? 0L : OrbcraftRuntime.nowTick(server);
+    }
+
+    /**
+     * 「今天」的 epochDay —— 定向卡每日额度的日期键。
+     *
+     * <p>用服务器本地时区而不是 UTC：东八区玩家会在北京时间早上 8 点刷新额度，
+     * 等于「熬夜到 8 点白拿一次」，是能被利用的规则漏洞。
+     *
+     * <p>放在这里是因为 {@code OrbcraftRuntime} 只回答了「账本在哪」，没有回答「今天是哪天」。
+     * 理想位置是运行期单例（账本与日期键分开两处，迟早会漂移），主线若把它挪过去，
+     * 这里和两个调用点各改一行即可。
+     */
+    static long todayEpochDay() {
+        return LocalDate.now(ZoneId.systemDefault()).toEpochDay();
     }
 
     /**
