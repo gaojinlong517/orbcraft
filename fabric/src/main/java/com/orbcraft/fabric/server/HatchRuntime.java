@@ -80,6 +80,10 @@ public final class HatchRuntime {
             ServerPlayer owner = online.get(ticket.ownerKey());
             if (owner == null) {
                 // 离线就绪：票据停在 READY 等玩家上线（S4 恢复时不会重播，见 restore 语义）。
+                // 注意下面那轮标脏并**不跳过**离线的 ownerKey —— 该票能真的写进存档，
+                // 依赖 S4 的会话不随下线删除（下线只 saveNow、不销毁会话）。
+                // 若哪天 S4 改成「下线即删会话」，这里会静默退化成不落盘：
+                // 症状是离线玩家就绪后重启又收到一次播报。
                 OrbcraftMod.LOG.info("[orbcraft] 票据 {} 在主人离线时就绪，保留 READY 等待上线",
                         ticket.ticketId());
                 continue;
