@@ -78,14 +78,26 @@ public final class OrbDevCommand {
         IncubationService hatch = OrbcraftRuntime.hatch();
         long now = OrbcraftRuntime.nowTick(source.getServer());
 
+        // 分两种状态数：在孵（可以加速）与已就绪（不需要加速，直接能投）。
+        // 只数 CHARGING 会让「球早就孵好了」被报成「你没有球」——
+        // 玩家手里明明拿着两颗，这句话看起来就是坏档。
         int before = 0;
+        int readyAlready = 0;
         for (HatchTicket ticket : hatch.ticketsOf(ownerKey)) {
             if (ticket.state() == com.orbcraft.core.hatch.HatchState.CHARGING) {
                 before++;
+            } else if (ticket.state() == com.orbcraft.core.hatch.HatchState.READY) {
+                readyAlready++;
             }
         }
         if (before == 0) {
-            source.sendSuccess(() -> Component.literal("没有正在孵的球"), false);
+            if (readyAlready > 0) {
+                final int ready = readyAlready;
+                source.sendSuccess(() -> Component.literal(
+                        "没有在孵的球；已有 " + ready + " 颗就绪，直接右键投出去（/orbdev tickets 看明细）"), false);
+            } else {
+                source.sendSuccess(() -> Component.literal("手上没有在孵或已就绪的球"), false);
+            }
             return 0;
         }
 
