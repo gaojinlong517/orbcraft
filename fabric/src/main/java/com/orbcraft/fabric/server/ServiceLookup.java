@@ -52,4 +52,16 @@ final class ServiceLookup {
             return null;
         }
     }
+
+    /**
+     * 只回答「装没装」，<b>不打日志</b>。给启动自检用 —— 自检会集中报一次，
+     * 让这里再各报一次就变成同一件事三条日志。
+     */
+    static boolean installed(Supplier<?> getter) {
+        try {
+            return getter.get() != null;
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
 }

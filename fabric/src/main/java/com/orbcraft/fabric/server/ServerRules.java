@@ -1,8 +1,13 @@
 package com.orbcraft.fabric.server;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.orbcraft.fabric.OrbcraftMod;
+import com.orbcraft.fabric.contract.Services;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.ItemEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -60,9 +65,48 @@ public final class ServerRules {
         // 对空右键与对方块右键在原版是两条路径（use / useOn），只拦一条会留下绕过口。
         ItemEvents.USE_ON.register(ThrowGuard::onUseOn);
         ServerPlayConnectionEvents.DISCONNECT.register(ThrowGuard::onDisconnect);
+        ServerLifecycleEvents.SERVER_STARTED.register(ServerRules::selfCheck);
         CommandRegistrationCallback.EVENT.register((dispatcher, registry, selection) ->
                 AdminCommands.register(dispatcher));
 
         OrbcraftMod.LOG.info("[orbcraft] S5 联机规则装载：tick 推进点唯一 · 投掷归属拦截 · /orbadmin（权限等级 2）");
+    }
+
+    /**
+     * 开服自检 —— <b>把「静默不生效」变成一行日志。</b>
+     *
+     * <p>为什么需要它：本包的降级策略是「契约没装就放行」（{@link ServiceLookup}），
+     * 这在并行开发期是必要的，但它有个致命副作用 —— 若 S1 没接线，
+     * 「A 的球 B 扔不了」会<b>静默失效</b>：球照样扔得出去，日志里只有一行 warn，
+     * 验收的人会以为拦截逻辑写错了。这里在开服时一口气把结论说清楚：
+     * 谁没装、后果是什么、不是谁的问题。
+     *
+     * <p>用 {@code Services.ready()} 的同一套判据做自检不是越界 ——
+     * 契约里写明它「只给启动自检用，业务代码不要拿它做分支」。
+     *
+     * <p>本方法检不出「{@code ServerRules.init()} 压根没被调用」：那种情况下
+     * 本类一行都不会执行，只能靠「日志里没有 S5 装载那一行」反推。
+     */
+    private static void selfCheck(net.minecraft.server.MinecraftServer server) {
+        List<String> missing = new ArrayList<>();
+        if (!ServiceLookup.installed(Services::orbItem)) {
+            missing.add("OrbItemContract（S1：item/OrbItems.init()）");
+        }
+        if (!ServiceLookup.installed(Services::summonSpawner)) {
+            missing.add("SummonSpawner（S3：spawn/VanillaSummonSpawner.init()）");
+        }
+        if (!ServiceLookup.installed(Services::playerStore)) {
+            missing.add("PlayerStore（S4：store/OrbcraftStore.init()）");
+        }
+
+        if (missing.isEmpty()) {
+            OrbcraftMod.LOG.info("[orbcraft] S5 自检通过：三个契约均已就位，投掷归属拦截与孵化推进正常生效");
+            return;
+        }
+        OrbcraftMod.LOG.error("[orbcraft] S5 自检未通过：{} 未就位。"
+                        + "在此之前「A 的球 B 扔不了」会直接放行（不是拦截逻辑写错，是 init() 没接线），"
+                        + "孵化的恢复与该玩家的落盘也会缺一半。"
+                        + "请检查 OrbcraftMod.onInitialize() 是否按顺序调用了各路 init()。",
+                String.join("、", missing));
     }
 }
