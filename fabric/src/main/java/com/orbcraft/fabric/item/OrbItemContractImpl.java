@@ -106,9 +106,14 @@ public final class OrbItemContractImpl implements OrbItemContract {
         if (player == null) {
             return ThrowCheck.deny("没有玩家，扔不出去");
         }
+        // 「不是球」和「是球但记录坏了」必须分开说。混成一句会让手里那颗坏球的玩家
+        // 以为自己拿错了东西，也分不清是「这本来就不是球」还是「我的球被人动了」。
+        if (stack == null || stack.isEmpty() || !stack.is(OrbItems.ORB)) {
+            return ThrowCheck.deny("这不是一颗能投出的球");
+        }
         Optional<HatchTicket> read = readOrb(stack);
         if (read.isEmpty()) {
-            return ThrowCheck.deny("这不是一颗能投出的球");
+            return ThrowCheck.deny("这颗球已经损坏，记录读不出来，用不了了");
         }
         HatchTicket onStack = read.get();
 
