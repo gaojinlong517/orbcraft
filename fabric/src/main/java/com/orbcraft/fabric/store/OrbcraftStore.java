@@ -460,6 +460,12 @@ public final class OrbcraftStore implements PlayerStore {
     private synchronized void writeSession(String key, long now) {
         Session session = sessions.get(key);
         if (session == null) {
+            // 本进程没见过这个玩家：一个字节都不写。绝不能在这里退化成「load 一份再写」——
+            // 磁盘上的那份是旧的，内存里的新状态（刚就绪的票、刚扣的配额）会反过来被旧值覆盖。
+            //
+            // 也<b>不要</b>把会话改成「下线即删」来省内存：S5 在 tick 里对「主人已离线但票刚就绪」
+            // 的 ownerKey 标脏，那条路正是靠「会话活过下线」才写得进去。删了它不会报错，
+            // 只会让离线玩家的 READY 停在内存里 —— 症状是重启后又收到一次「球亮了」的播报。
             return;
         }
         session.lastActiveTick = now;
