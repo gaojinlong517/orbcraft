@@ -1,5 +1,6 @@
 package com.orbcraft.fabric;
 
+import com.orbcraft.fabric.combat.CombatInit;
 import com.orbcraft.fabric.command.OrbBuildCommand;
 import com.orbcraft.fabric.item.OrbItems;
 import com.orbcraft.fabric.net.OrbcraftNet;
@@ -53,6 +54,7 @@ public final class OrbcraftMod implements ModInitializer {
         OrbItems.init();
         OrbcraftNet.init();
         VanillaSummonSpawner.init();
+        CombatInit.init();
         ServerRules.init();
         OrbDevCommand.init();
         OrbBuildCommand.init();
