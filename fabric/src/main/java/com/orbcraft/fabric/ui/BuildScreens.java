@@ -19,6 +19,7 @@ import com.orbcraft.core.target.TargetAllowance;
 import com.orbcraft.fabric.net.OrbcraftNet;
 import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -69,6 +70,12 @@ final class BuildScreens {
 
     private static void guiFlush(ServerPlayer player) {
         if (guiTitle != null && !GUI_BUTTONS.isEmpty()) {
+            // 开发期专属按钮：跳过一次孵化等待。
+            // 用 isDevelopmentEnvironment 判断而不是手写开关 —— 正式构建里这个类
+            // 自动不生效，不需要谁「记得上线前删掉」。
+            if (FabricLoader.getInstance().isDevelopmentEnvironment()) {
+                GUI_BUTTONS.add(new String[] {"⚡ 跳过孵化（仅开发）", "/orbdev hatch", "gold"});
+            }
             OrbcraftNet.sendBuildScreen(player, guiTitle, GUI_BUTTONS);
         }
         GUI_BUTTONS.clear();

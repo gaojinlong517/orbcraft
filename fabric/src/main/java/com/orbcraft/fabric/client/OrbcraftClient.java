@@ -8,7 +8,11 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import com.orbcraft.fabric.entity.orb.OrbEntities;
+import com.orbcraft.fabric.entity.orb.OrbProjectile;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.renderer.entity.EntityRenderers;
+import net.minecraft.client.renderer.entity.ThrownItemRenderer;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -50,6 +54,12 @@ public final class OrbcraftClient implements ClientModInitializer {
                 }
             }
         });
+        // 投掷物必须有客户端渲染器。少了这一行不是「看不见」，是整个世界渲染循环 NPE：
+        // EntityRenderDispatcher.shouldRender 直接对 null 调用 —— 表现是「丢球必崩服」。
+        // 用原版「飞行的物品」渲染器：球长什么样，飞出去就是什么样。
+        EntityRenderers.register(OrbEntities.PROJECTILE,
+                context -> new ThrownItemRenderer<OrbProjectile>(context));
+
         ClientPlayNetworking.registerGlobalReceiver(BuildScreenS2C.ID, (payload, context) ->
                 // 必须切回客户端主线程再开界面：网络回调跑在 netty 线程上，
                 // 在那里碰 Screen / 世界状态会偶发崩溃，而且崩得没有规律。

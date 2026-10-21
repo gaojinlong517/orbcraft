@@ -121,6 +121,9 @@ public final class OrbDevCommand {
         final int total = before;
         source.sendSuccess(() -> Component.literal(
                 "已跳过孵化：" + done + "/" + total + " 颗进入就绪，右键投出去试试"), false);
+        // 界面还开着的时候敲不出这条命令也行，但要让它立刻刷新：
+        // 否则玩家点完按钮看不到任何变化，会以为没生效。
+        com.orbcraft.fabric.ui.BuildFlow.status(self);
         return done;
     }
 
