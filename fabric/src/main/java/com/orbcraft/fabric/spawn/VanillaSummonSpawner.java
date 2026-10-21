@@ -48,10 +48,12 @@ import net.minecraft.world.phys.Vec3;
  * 会直接以 {@code minecraft:warden} 的样子出现，并收到降级提示。
  *
  * <p><b>外观降级的提示不在这里发。</b> {@link SpawnResult#appearance()} 的用途就是
- * 「让调用方决定要不要提示」，S1 的落地路径已经按它发过中文提示；S3 再发一条，
- * 玩家就会收到两条一模一样的消息 —— 同一次召唤的提示只能有一个发送方。
- * 本类的责任是<b>如实报等级</b>：模型没挂上时报 {@link ModelCapability#NAMED_VANILLA}，
- * 而不是转述后端自报的 FULL。
+ * 「让调用方决定要不要提示」—— 提示所有权在调用方，当前唯一发送方是 S1 的投掷落地路径
+ * （它才知道「谁扔的、落在哪」）。S3 只做两件事：<b>如实报等级</b>
+ * （模型没挂上时报 {@link ModelCapability#NAMED_VANILLA}，而不是转述后端自报的 FULL），
+ * 以及把「为什么降级」写进 debug 日志。
+ * 任何新增的 spawn 调用方都必须自己按 {@code shouldWarnPlayer()} 提示，
+ * 否则玩家看到一只长得不对的召唤物时没有任何解释。
  *
  * <p><b>本类不抛异常。</b> 它跑在投掷物命中的 tick 里，异常会打断整个 tick，
  * 玩家的观感是「服务器卡一下，然后这颗球消失了」。所有失败走
@@ -233,9 +235,10 @@ public final class VanillaSummonSpawner implements SummonSpawner {
         SummonAppearance.Attached attached = look.attach(entityId, modelPlan, spec.scalePct(), tint);
         ModelCapability effective = proxySubstituted ? ModelCapability.NAMED_VANILLA : attached.capability();
         if (effective.shouldWarnPlayer()) {
-            // 提示由调用方发（S1 落地路径已按 appearance().shouldWarnPlayer() 发过）。
-            // 本类只保证等级如实，并在日志里留下「为什么降级」——见 attach 的那行 INFO。
-            OrbcraftMod.LOG.info("[orbcraft] 召唤 {} 外观降级为 {}：{}", spec.displayName(), effective,
+            // 提示所有权在调用方（当前唯一发送方是 S1 的投掷落地路径）。
+            // 这里只留一条 debug：联调时「为什么这只召唤物长得不对」只能从这条查。
+            OrbcraftMod.LOG.debug("[orbcraft] 召唤 {} 外观降级 · spec={} · 载体={} · 等级={} · 原因={}",
+                    spec.displayName(), spec.id(), modelPlan.carrierId(), effective,
                     proxySubstituted ? "代理实体不能战斗，已改用 " + COMBAT_FALLBACK_PROXY : attached.note());
         }
 
