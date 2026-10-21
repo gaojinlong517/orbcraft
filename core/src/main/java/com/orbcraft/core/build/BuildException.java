@@ -23,6 +23,10 @@ public class BuildException extends RuntimeException {
         TOO_MANY_CHOICES,
         /** 选的数量不足本层要求的选取数。 */
         NOT_ENOUGH_CHOICES,
+        /** 形态层换批次数已用尽 —— 玩家可自行纠正（不换就是了），不是故障。 */
+        REROLL_EXHAUSTED,
+        /** 同一层选了两张同族的卡 —— 叠两次同一项强化，比拒绝掉危险。 */
+        FAMILY_CONFLICT,
         /** 描述卡层缺少载体 —— 没有载体的产物无法生成外观与落地。 */
         CARRIER_REQUIRED,
         /** 候选池过滤后不足以发出本层要求的最小张数。 */
