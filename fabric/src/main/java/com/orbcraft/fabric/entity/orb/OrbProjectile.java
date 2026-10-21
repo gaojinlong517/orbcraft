@@ -11,6 +11,7 @@ import com.orbcraft.core.spec.Spec;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.Services;
 import com.orbcraft.fabric.contract.SummonSpawner;
+import com.orbcraft.fabric.consume.ConsumableDeployer;
 import com.orbcraft.fabric.equip.EquipmentDeployer;
 import com.orbcraft.fabric.item.OrbItems;
 import com.orbcraft.fabric.runtime.OrbcraftRuntime;
@@ -219,7 +220,7 @@ public final class OrbProjectile extends ThrowableItemProjectile {
         }
         Spec spec = ticket.spec();
         if (!spec.isSummon()) {
-            deployEquipment(level, pos, spec);
+            deployNonSummon(level, pos, spec);
             return;
         }
         SummonSpawner.SpawnResult result;
@@ -241,6 +242,22 @@ public final class OrbProjectile extends ThrowableItemProjectile {
         // 结论会是「这模组有 bug」，而不是「美术还没做完」。
         if (result.appearance().shouldWarnPlayer()) {
             tellAppearance(spec, result.appearance());
+        }
+    }
+
+    /** 非召唤物按产物类型分流。新增类型时在这里加一支，不要塞进 summon 的调用链。 */
+    private void deployNonSummon(ServerLevel level, Vec3 pos, Spec spec) {
+        switch (spec.type()) {
+            case EQUIPMENT -> deployEquipment(level, pos, spec);
+            case CONSUMABLE -> {
+                ConsumableDeployer.Result result =
+                        ConsumableDeployer.deploy(level, pos, spec, this.ownerKey);
+                if (!result.deployed()) {
+                    tell("落地失败：" + result.reason());
+                }
+            }
+            default -> tell("「" + spec.displayName() + "」是" + spec.type().zh()
+                    + "，这一版还不能落地，先留在手里");
         }
     }
 

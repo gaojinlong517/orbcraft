@@ -123,10 +123,12 @@ public final class OrbItemContractImpl implements OrbItemContract {
             return ThrowCheck.deny("这是别人的球");
         }
 
-        // 召唤物（S3）与装备（equip 包）都有落地实现；消耗品还没有。
-        // 消耗品投出去只会飞一段、然后球消失，玩家的观感是「我的东西凭空蒸发了」，
-        // 所以它仍然拦在手里。新增产物类型时这里必须同步放开，否则就是同样的静默蒸发。
-        if (!onStack.spec().isSummon() && onStack.spec().type() != ProductType.EQUIPMENT) {
+        // 三种产物都有落地实现：召唤物（spawn 包）、装备（equip 包）、消耗品（consume 包）。
+        // 仍然拦在手里的是「未知的新类型」—— 宁可扔不出去，也不让球飞一段后凭空蒸发。
+        // 新增 ProductType 时这里必须同步放开，否则就是同样的静默蒸发。
+        if (!onStack.spec().isSummon()
+                && onStack.spec().type() != ProductType.EQUIPMENT
+                && onStack.spec().type() != ProductType.CONSUMABLE) {
             return ThrowCheck.deny("「" + onStack.spec().displayName() + "」是"
                     + onStack.spec().type().zh() + "，这一版还不能落地，先留在手里");
         }
