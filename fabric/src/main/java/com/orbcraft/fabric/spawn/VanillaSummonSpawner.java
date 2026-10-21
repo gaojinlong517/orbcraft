@@ -47,6 +47,12 @@ import net.minecraft.world.phys.Vec3;
  * 这也解释了为什么 {@code treant}（{@code asset=NEW}，模型没烘进资源包）
  * 会直接以 {@code minecraft:warden} 的样子出现，并收到降级提示。
  *
+ * <p><b>外观降级的提示不在这里发。</b> {@link SpawnResult#appearance()} 的用途就是
+ * 「让调用方决定要不要提示」，S1 的落地路径已经按它发过中文提示；S3 再发一条，
+ * 玩家就会收到两条一模一样的消息 —— 同一次召唤的提示只能有一个发送方。
+ * 本类的责任是<b>如实报等级</b>：模型没挂上时报 {@link ModelCapability#NAMED_VANILLA}，
+ * 而不是转述后端自报的 FULL。
+ *
  * <p><b>本类不抛异常。</b> 它跑在投掷物命中的 tick 里，异常会打断整个 tick，
  * 玩家的观感是「服务器卡一下，然后这颗球消失了」。所有失败走
  * {@link SpawnResult#failed} 与中文原因。
@@ -226,14 +232,11 @@ public final class VanillaSummonSpawner implements SummonSpawner {
         Integer tint = SpecTags.tintOf(SpecTags.elementOf(spec.tags()));
         SummonAppearance.Attached attached = look.attach(entityId, modelPlan, spec.scalePct(), tint);
         ModelCapability effective = proxySubstituted ? ModelCapability.NAMED_VANILLA : attached.capability();
-
         if (effective.shouldWarnPlayer()) {
-            // 契约要求：能力不足以支撑外观时必须提示玩家，否则会被当成 bug
-            String why = proxySubstituted
-                    ? "这个载体没有能战斗的代理外观，已改用" + COMBAT_FALLBACK_PROXY
-                    : (attached.note().isBlank() ? "外观后端只有原版实体" : attached.note());
-            notifyOwner(level, ownerKey, "「" + spec.displayName() + "」已召唤，但外观已降级："
-                    + why + "。玩法数值不受影响。");
+            // 提示由调用方发（S1 落地路径已按 appearance().shouldWarnPlayer() 发过）。
+            // 本类只保证等级如实，并在日志里留下「为什么降级」——见 attach 的那行 INFO。
+            OrbcraftMod.LOG.info("[orbcraft] 召唤 {} 外观降级为 {}：{}", spec.displayName(), effective,
+                    proxySubstituted ? "代理实体不能战斗，已改用 " + COMBAT_FALLBACK_PROXY : attached.note());
         }
 
         OrbcraftMod.LOG.info("[orbcraft] 召唤 {} · {} · 实体 {} · 血量 {} · 攻击 {} · 外观 {}",
@@ -321,13 +324,6 @@ public final class VanillaSummonSpawner implements SummonSpawner {
             }
         }
         return null;
-    }
-
-    private static void notifyOwner(ServerLevel level, String ownerKey, String message) {
-        ServerPlayer player = ownerPlayer(level, ownerKey);
-        if (player != null) {
-            player.displayClientMessage(Component.literal(message), false);
-        }
     }
 
     /**
