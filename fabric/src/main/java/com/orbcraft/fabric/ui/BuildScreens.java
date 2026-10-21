@@ -221,7 +221,7 @@ final class BuildScreens {
 
     static void showTargets(ServerPlayer player, BuildSeat seat) {
         TargetAllowance book = OrbcraftRuntime.allowanceOf(seat.ownerKey());
-        long today = BuildRuntime.todayEpochDay();
+        long today = OrbcraftRuntime.todayEpochDay();
         BaseKind kind = seat.session() == null ? null : seat.session().kind().orElse(null);
 
         if (kind == null) {

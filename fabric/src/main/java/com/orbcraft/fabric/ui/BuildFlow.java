@@ -239,7 +239,7 @@ public final class BuildFlow {
             BuildScreens.toast(player, "「" + card + "」不适用于" + kind.zh(), ChatFormatting.RED);
             return;
         }
-        long today = BuildRuntime.todayEpochDay();
+        long today = OrbcraftRuntime.todayEpochDay();
         int left = OrbcraftRuntime.allowanceOf(seat.ownerKey()).remaining(seat.ownerKey(), today, kind);
         if (left <= 0) {
             BuildScreens.toast(player, kind.zh() + "今天的定向额度已用完", ChatFormatting.RED);
@@ -263,6 +263,10 @@ public final class BuildFlow {
         Optional<TargetAllowance> after = OrbcraftRuntime.allowanceOf(seat.ownerKey())
                 .use(seat.ownerKey(), today, kind);
         after.ifPresent(ledger -> OrbcraftRuntime.installAllowance(seat.ownerKey(), ledger));
+        if (after.isPresent()) {
+            // 额度是既成事实：只等定时保存的话，玩家这期间崩服就等于白拿一次
+            markDirty(seat.ownerKey());
+        }
         if (after.isEmpty()) {
             // 上面的 remaining 已经挡过一次，走到这里说明并发写坏了账本 —— 要报警
             LOG.warn("[orbcraft/build] 定向卡已生效但额度扣减失败：{} {}", seat.ownerKey(), card.id());
@@ -426,8 +430,11 @@ public final class BuildFlow {
         try {
             orbStack = orb.createOrb(ticket);
         } catch (RuntimeException e) {
-            // 票据已经建好（配额已扣），这里失败只能留证：日志里带 ticketId，能人工补发
+            // 票据已经建好（配额已扣），这里失败只能留证：日志里带 ticketId，能人工补发。
+            // 更要紧的是把这次扣减落盘 —— 不落盘的话重启后票据消失、配额却也许还在，
+            // 两边对不上，补发时连凭据都没有
             LOG.error("[orbcraft/build] 票据 {} 已建但造球失败，需要人工补发", ticket.ticketId(), e);
+            markDirty(seat.ownerKey());
             BuildScreens.toast(player, "球没造出来，但配额已扣。把这条消息发给管理员：" + ticket.ticketId(),
                     ChatFormatting.RED);
             seat.endSession();
@@ -440,9 +447,8 @@ public final class BuildFlow {
             player.drop(orbStack, false);
         }
         seat.endSession();
-        // 这里不直接落盘：submit 是唯一扣配额的地方，落盘必须紧跟着它发生，
-        // 但那根钩子归 S4（它持有存档布局）。主线会在运行期扣减路径上接，
-        // 跨包调 store 会让 S2 的编译依赖覆盖别人的包。
+        // submit 是唯一扣配额的地方，必须马上告诉存档层，不能让那次扣减等 5 分钟的定时保存
+        markDirty(seat.ownerKey());
         BuildScreens.toast(player, "造好了：" + ticket.spec().displayName() + " · 充能 "
                 + ticket.totalSeconds() + " 秒"
                 + (stored ? " · 球已放进背包" : " · 背包满了，球掉在脚下"), ChatFormatting.GREEN);
@@ -476,6 +482,25 @@ public final class BuildFlow {
             return BehaviorMode.NONE;
         }
         return seat.behavior() == null ? BehaviorMode.ATTACK : seat.behavior();
+    }
+
+    /**
+     * 告诉存档层「这个人的状态变了」。
+     *
+     * <p>用契约的 {@code markDirty} 而不是 {@code save}：构筑层手里只有 ownerKey，
+     * 拼不出一份完整的 {@code PlayerState}（配额、票据都在运行期单例里）。让表现层
+     * 去拼整份存档，等于让 UI 替存储层决定存档内容；跨包调 store 又会把 S2 的编译
+     * 依赖扩到别人的包。
+     *
+     * <p>存档层还没注册时只记日志：此刻球已经造出来、配额已经扣了，报错也退不回去，
+     * 把玩家的操作打断只会让现场更难查。
+     */
+    private static void markDirty(String ownerKey) {
+        try {
+            Services.playerStore().markDirty(ownerKey);
+        } catch (IllegalStateException e) {
+            LOG.warn("[orbcraft/build] 存档层尚未注册，这次状态变更没有落盘（{}）", ownerKey);
+        }
     }
 
     /**

@@ -1,7 +1,5 @@
 package com.orbcraft.fabric.ui;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -58,20 +56,6 @@ public final class BuildRuntime {
     static long nowTick(ServerPlayer player) {
         MinecraftServer server = player.level().getServer();
         return server == null ? 0L : OrbcraftRuntime.nowTick(server);
-    }
-
-    /**
-     * 「今天」的 epochDay —— 定向卡每日额度的日期键。
-     *
-     * <p>用服务器本地时区而不是 UTC：东八区玩家会在北京时间早上 8 点刷新额度，
-     * 等于「熬夜到 8 点白拿一次」，是能被利用的规则漏洞。
-     *
-     * <p>放在这里是因为 {@code OrbcraftRuntime} 只回答了「账本在哪」，没有回答「今天是哪天」。
-     * 理想位置是运行期单例（账本与日期键分开两处，迟早会漂移），主线若把它挪过去，
-     * 这里和两个调用点各改一行即可。
-     */
-    static long todayEpochDay() {
-        return LocalDate.now(ZoneId.systemDefault()).toEpochDay();
     }
 
     /**
