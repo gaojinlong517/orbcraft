@@ -47,11 +47,13 @@ public final class OrbcraftNet {
             root.addProperty("title", title);
             JsonArray arr = new JsonArray();
             for (String[] b : buttons) {
-                // 约定：{标签, 命令, 色调}
+                // 约定：{标签, 命令, 色调, 图标, 副标题}，后两项可缺省
                 JsonObject one = new JsonObject();
                 one.addProperty("label", b[0]);
                 one.addProperty("cmd", b[1]);
                 one.addProperty("tone", b.length > 2 ? b[2] : "white");
+                one.addProperty("icon", b.length > 3 ? b[3] : "action");
+                one.addProperty("detail", b.length > 4 ? b[4] : "");
                 arr.add(one);
             }
             root.add("buttons", arr);
