@@ -6,6 +6,9 @@
 # ---- Local tool state (WorkBuddy workspace data) ----
 .workbuddy/
 
+# ---- 并行开发的 worktree（五路各一个，不进仓库）----
+.worktrees/
+
 # ---- Java compile output ----
 *.class
 out/

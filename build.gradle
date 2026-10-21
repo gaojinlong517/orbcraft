@@ -81,6 +81,23 @@ java {
     withSourcesJar()
 }
 
+// ---------------------------------------------------------------- 并行开发辅助
+//
+// 五路并行时每路在自己的 worktree 里改代码，需要一个「不启 Gradle 守护进程」的
+// 编译检查：五个 daemon 同时跑会把内存吃干净（本机 31G，实际空闲只剩 4G，
+// 每个 Loom 构建 1.5G 左右，五个一起就是 OOM）。
+//
+// 这个任务导出 remap 之后的编译类路径，tools/fast-compile.sh 拿它直接调 javac，
+// 一次全量编译约 3 秒、零常驻内存。合并回主线后仍然以 ./gradlew build 为准 ——
+// javac 只验「编译得过」，不验资源处理与 jar 打包。
+tasks.register('printCompileClasspath') {
+    description = '输出 main sourceSet 的编译类路径（供 tools/fast-compile.sh 使用）'
+    group = 'help'
+    doLast {
+        println sourceSets.main.compileClasspath.asPath
+    }
+}
+
 // ---------------------------------------------------------------- 资源展开
 // fabric.mod.json 里的 ${version} 只能是构建期替换 —— 手写版本号必然忘记同步。
 processResources {
