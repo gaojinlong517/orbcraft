@@ -3,8 +3,13 @@ package com.orbcraft.fabric.client;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.net.BuildScreenS2C;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.KeyMapping;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * 客户端入口。
@@ -19,8 +24,32 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
  */
 public final class OrbcraftClient implements ClientModInitializer {
 
+    /**
+     * 打开构筑菜单的快捷键。默认 O，玩家可以在「选项 → 控制」里改。
+     *
+     * <p>入门槛只有一个按键：要求玩家先记住 {@code /orb build} 这种命令，
+     * 等于把功能藏起来。菜单打开后全是点击，命令仍然保留给熟悉的人。
+     */
+    private static KeyMapping openMenu;
+
     @Override
     public void onInitializeClient() {
+        openMenu = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.orbcraft.build_menu",
+                InputConstants.Type.KEYSYM,
+                GLFW.GLFW_KEY_O,
+                KeyMapping.Category.GAMEPLAY));
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (openMenu.consumeClick()) {
+                if (client.player != null) {
+                    // 发的是 status 而不是 build：menu 只是「打开当前这一屏」，
+                    // 没有进行中的构筑时服务端回的就是落地页（上面有「开始构筑」按钮）。
+                    // 这样按 O 永远不会误开一局新的构筑。
+                    client.player.connection.sendCommand("orb status");
+                }
+            }
+        });
         ClientPlayNetworking.registerGlobalReceiver(BuildScreenS2C.ID, (payload, context) ->
                 // 必须切回客户端主线程再开界面：网络回调跑在 netty 线程上，
                 // 在那里碰 Screen / 世界状态会偶发崩溃，而且崩得没有规律。

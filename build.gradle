@@ -61,6 +61,10 @@ loom {
         }
         client {
             runDir 'run/client'
+            // 固定开发者用户名。不加的话每次启动都是随机 Player###，
+            // 而离线模式 UUID = f(用户名) —— 等于每重启一次就换一个玩家：
+            // 存档对不上、手里上一局的球被判成「别人的球」。
+            programArgs '--username', 'Developer'
         }
     }
 }
