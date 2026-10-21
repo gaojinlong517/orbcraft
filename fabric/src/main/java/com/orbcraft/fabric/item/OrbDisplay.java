@@ -53,7 +53,7 @@ final class OrbDisplay {
     /**
      * 写入会随时间变化的部分：耐久条与两行 lore。
      *
-     * @param nowTick 与 {@code IncubationService} 同一个时钟（{@code Level#getGameTime()}），
+     * @param nowTick 与 {@code IncubationService} 同一个时钟（{@code OrbcraftRuntime#nowTick}），
      *                否则「条满了但投不出去」这种错位会天天出现
      */
     static void refresh(ItemStack stack, HatchTicket ticket, long nowTick) {

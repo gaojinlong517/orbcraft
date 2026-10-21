@@ -2,13 +2,12 @@ package com.orbcraft.fabric.entity.orb;
 
 import com.orbcraft.core.hatch.HatchException;
 import com.orbcraft.core.hatch.HatchTicket;
-import com.orbcraft.core.render.ModelCapability;
 import com.orbcraft.core.spec.Spec;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.Services;
 import com.orbcraft.fabric.contract.SummonSpawner;
-import com.orbcraft.fabric.item.OrbHatch;
 import com.orbcraft.fabric.item.OrbItems;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -132,7 +131,7 @@ public final class OrbProjectile extends ThrowableItemProjectile {
 
         boolean first;
         try {
-            first = OrbHatch.service().deploy(id, level.getGameTime());
+            first = OrbcraftRuntime.hatch().deploy(id, OrbcraftRuntime.nowTick(level.getServer()));
         } catch (HatchException e) {
             if (e.code() != HatchException.Code.UNKNOWN_TICKET) {
                 // 未投出就落地 / 票据已失效：真正的状态错乱，记日志并让球消失比留在世界里安全。
@@ -154,7 +153,7 @@ public final class OrbProjectile extends ThrowableItemProjectile {
         }
 
         // 服务里的票据是唯一真相，球上那份只在服务查不到时兜底。
-        summon(level, pos, OrbHatch.service().ticket(id).orElse(carried));
+        summon(level, pos, OrbcraftRuntime.hatch().ticket(id).orElse(carried));
         this.discard();
     }
 
@@ -181,14 +180,8 @@ public final class OrbProjectile extends ThrowableItemProjectile {
             tell("落地失败：" + result.reason());
             return;
         }
-        // 外观降级必须说出来，否则玩家会把它当成自己的构筑出了问题。
-        if (result.appearance().shouldWarnPlayer()) {
-            tell(switch (result.appearance()) {
-                case NAMED_VANILLA -> "外观已降级为原版形态，数值不受影响";
-                case NONE -> "外观后端不可用，召唤物暂时看不见，数值不受影响";
-                case FULL -> "";
-            });
-        }
+        // 外观降级提示由 S3 在 spawn 内部发给在线主人，这里不再重复发 ——
+        // 同一次召唤弹两条一模一样的「外观已降级」，玩家会以为出了两次问题。
     }
 
     private void tell(String message) {

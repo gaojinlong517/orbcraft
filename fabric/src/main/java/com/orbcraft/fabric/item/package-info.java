@@ -5,9 +5,9 @@
  * <ul>
  *   <li>{@link com.orbcraft.fabric.item.OrbItems#init()} —— 注册物品 / 实体类型 / 安装
  *       {@code OrbItemContract} 实现，由 {@code OrbcraftMod.onInitialize()} 调一次。</li>
- *   <li>{@link com.orbcraft.fabric.item.OrbHatch#service()} —— 全项目唯一的
- *       {@code IncubationService} 实例。S2（定稿）、S4（存档）、S5（唯一 tick 点）、S1（投掷/落地）
- *       必须共用它，各自 {@code new} 一个等于每人一套账本。</li>
+ *   <li>孵化服务与时钟一律取 {@code com.orbcraft.fabric.runtime.OrbcraftRuntime}
+ *       （{@code hatch()} / {@code nowTick(server)}）—— 全服只有那一份实例，
+ *       本包<b>不持有</b>、也不再 {@code new IncubationService()}。</li>
  * </ul>
  *
  * <p>其余类都是实现细节：{@code OrbItem}（物品行为）、{@code OrbItemContractImpl}（契约）、

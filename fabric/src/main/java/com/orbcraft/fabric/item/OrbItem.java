@@ -8,6 +8,7 @@ import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.PlayerStore;
 import com.orbcraft.fabric.entity.orb.OrbEntities;
 import com.orbcraft.fabric.entity.orb.OrbProjectile;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -75,6 +76,7 @@ public final class OrbItem extends Item {
         }
         HatchTicket ticket = read.get();
         ServerLevel level = player.level();
+        long nowTick = OrbcraftRuntime.nowTick(level.getServer());
 
         OrbProjectile ball = new OrbProjectile(
                 OrbEntities.PROJECTILE, player.getX(), player.getEyeY() - 0.1D, player.getZ(), level,
@@ -93,10 +95,10 @@ public final class OrbItem extends Item {
         }
 
         try {
-            OrbHatch.service().throwBall(ticket.ticketId(), level.getGameTime());
+            OrbcraftRuntime.hatch().throwBall(ticket.ticketId(), nowTick);
         } catch (HatchException e) {
             ball.discard();
-            player.displayClientMessage(Component.literal(throwReason(e, ticket, level.getGameTime())), true);
+            player.displayClientMessage(Component.literal(throwReason(e, ticket, nowTick)), true);
             return;
         }
 
@@ -136,7 +138,7 @@ public final class OrbItem extends Item {
      */
     @Override
     public void inventoryTick(ItemStack stack, ServerLevel level, Entity entity, EquipmentSlot slot) {
-        long nowTick = level.getGameTime();
+        long nowTick = OrbcraftRuntime.nowTick(level.getServer());
         // 一秒刷一次就够了。耐久条有 1000 级、进度每 tick 都在变，但每一次组件变化都要把
         // 整份物品重新发给客户端（票据里是完整的 Spec，带近百个属性键）。
         // 每 tick 刷等于给每个在读条的球白送几十 KB/s 的带宽，而玩家的眼睛只分得清秒。
@@ -148,7 +150,7 @@ public final class OrbItem extends Item {
             return;
         }
         HatchTicket onStack = read.get();
-        HatchTicket live = OrbHatch.service().ticket(onStack.ticketId()).orElse(onStack);
+        HatchTicket live = OrbcraftRuntime.hatch().ticket(onStack.ticketId()).orElse(onStack);
         OrbDisplay.refresh(stack, live, nowTick);
     }
 }

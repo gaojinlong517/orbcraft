@@ -7,6 +7,7 @@ import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.PlayerStore;
 import com.orbcraft.fabric.contract.Services;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
@@ -116,7 +117,7 @@ public final class OrbItemContractImpl implements OrbItemContract {
             return ThrowCheck.deny("这是别人的球");
         }
 
-        Optional<HatchTicket> live = OrbHatch.service().ticket(onStack.ticketId());
+        Optional<HatchTicket> live = OrbcraftRuntime.hatch().ticket(onStack.ticketId());
         if (live.isEmpty()) {
             // 跨存档的旧球、或者票据被服务端丢掉了。查不到时按「不能用」处理，
             // 反过来放行会让一颗没有任何票据的球凭空召出东西。
@@ -128,7 +129,7 @@ public final class OrbItemContractImpl implements OrbItemContract {
             return ThrowCheck.deny("这是别人的球");
         }
 
-        long nowTick = player.level().getGameTime();
+        long nowTick = OrbcraftRuntime.nowTick(player.level().getServer());
         return switch (ticket.state()) {
             // 条已满但状态还是 CHARGING：tick 一秒只扫一次，玩家在两次扫描之间右键是常态。
             // throwBall 会就地补迁移，所以这里必须放行，不能报「还差 0 秒」。
