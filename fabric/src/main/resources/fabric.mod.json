@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "orbcraft",
+  "version": "${version}",
+  "name": "Orbcraft",
+  "description": "抽卡构筑装备与召唤物，产物以孵化球形式释放。",
+  "authors": [
+    "orbcraft"
+  ],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.orbcraft.fabric.OrbcraftMod"
+    ],
+    "client": [
+      "com.orbcraft.fabric.client.OrbcraftClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.17.3",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "java": ">=21"
+  }
+}

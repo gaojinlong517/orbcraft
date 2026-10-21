@@ -1,0 +1,95 @@
+plugins {
+    // plugin id 用 `fabric-loom`，与 Fabric API 1.21.11 分支保持一致。
+    // 新 id `net.fabricmc.fabric-loom` 是 26.x 那一代模板的写法；1.21.11 上
+    // 两者都能解析到同一个实现，但版本必须锁在 1.13.3（原因见 gradle.properties）。
+    id 'fabric-loom' version "${loom_version}"
+}
+
+group = project.maven_group
+version = project.mod_version
+
+base {
+    archivesName = project.archives_base_name
+}
+
+// ---------------------------------------------------------------- 源码布局
+//
+// 源码不在根目录 src/，而在 fabric/src/main/java —— 仓库是「core 纯算法 + fabric 平台层」
+// 两个目录并排的结构，根目录只放构建脚本。这样 S0–S5 六路各占 fabric 下一个子包，
+// 文件所有权切得干净。
+//
+// core 的源码直接并进 main sourceSet，而不是做成独立的 Gradle 子项目：
+// core 零 MC 依赖、也不该知道 Fabric 的存在，做成子项目只多一层 project 依赖和
+// 一次 publish 配置，收益为零。等哪天 core 要被别的加载器复用时再拆不迟。
+sourceSets {
+    main {
+        java {
+            srcDirs = ['fabric/src/main/java', 'core/src/main/java']
+        }
+        resources {
+            srcDirs = ['fabric/src/main/resources', 'core/src/main/resources']
+        }
+    }
+}
+
+repositories {
+    // Loom 会自动加入 Minecraft / Fabric 的仓库，这里只补标准仓库。
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+
+    // 1.13.3 这一代的 Loom 仍用 modImplementation：它会把依赖 remap 到
+    // 开发环境的命名空间。写成普通 implementation 会在运行时找不到类。
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+// ---------------------------------------------------------------- 双 run 配置
+loom {
+    runs {
+        // 服务端与客户端分开运行目录：默认两边都是 run/，client 写 options.txt、
+        // server 写 server.properties，混在一起时排查「配置没生效」会浪费很多时间。
+        server {
+            runDir 'run/server'
+            // 无图形界面的开发机（CI、远程终端）必须加，不然服务端会尝试开 GUI 窗口
+            programArgs '--nogui'
+            // eula.txt 不代签：Mojang 要求使用者本人同意。
+            // 首次运行前手动建 run/server/eula.txt 写 eula=true。
+        }
+        client {
+            runDir 'run/client'
+        }
+    }
+}
+
+// ---------------------------------------------------------------- 编译
+tasks.withType(JavaCompile).configureEach {
+    options.release = project.java_version as int
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-Xlint:all'
+}
+
+java {
+    // 用 toolchain 而不是 sourceCompatibility：本机装了多个 JDK 时，
+    // 版本不一致会编出 target 21 但用 17 的 API 的字节码，运行期才炸。
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(project.java_version as int)
+    }
+    withSourcesJar()
+}
+
+// ---------------------------------------------------------------- 资源展开
+// fabric.mod.json 里的 ${version} 只能是构建期替换 —— 手写版本号必然忘记同步。
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+// 产物文件名固定为 orbcraft-<version>.jar（见 base.archivesName）。
+// 不在这里往 jar 里塞 LICENSE —— 仓库目前没有 LICENSE 文件，
+// Gradle 会静默跳过不存在的 from()，写出「看起来配了、实际什么都没做」的代码。
