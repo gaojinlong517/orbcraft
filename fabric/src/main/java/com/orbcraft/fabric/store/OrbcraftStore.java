@@ -413,7 +413,7 @@ public final class OrbcraftStore implements PlayerStore {
                         OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 的存档里有一张坏票据，已跳过", key);
                     }
                 }
-                case TARGET -> targets.add(readTarget(key, frame.tag()));
+                case TARGET -> readTarget(key, frame.tag()).ifPresent(targets::add);
             }
         }
 
@@ -423,7 +423,22 @@ public final class OrbcraftStore implements PlayerStore {
         return new PlayerState(new HatchSnapshot(key, quota, tickets), targets, lastActiveTick);
     }
 
-    private static TargetAllowance.Snapshot readTarget(String key, CompoundTag tag) {
+    /**
+     * 读一段定向卡记录。
+     *
+     * <p><b>缺 {@code day} 键时整段跳过，不造一个 day=0 的格子。</b> 缺键说明这段写到一半
+     * 或被人改过，而造出来的格子会污染账本：{@code snapshot()} 会把它原样写回文件，
+     * 于是这条 1970 年的记录一直留在盘上；{@code trackedDays()} 多算一天，诊断时先被怀疑
+     * 的是「日期算错了」而不是「存档缺了个键」。跳过的语义是「这一格作废」——
+     * 代价是玩家当天的额度可能偏多，所以必须留一条 warn，否则就是静默的数据丢失。
+     * 这与 TICKET 段读不出来时的处理是同一个标准（warn + 跳过，不伪造内容）。
+     */
+    private static Optional<TargetAllowance.Snapshot> readTarget(String key, CompoundTag tag) {
+        if (!tag.contains("day")) {
+            OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 的存档里有一段定向卡记录缺 day 键，已跳过"
+                    + "（当天这一类额度可能偏多）", key);
+            return Optional.empty();
+        }
         Map<BaseKind, Integer> used = new LinkedHashMap<>();
         CompoundTag counts = tag.getCompoundOrEmpty("used");
         for (String name : counts.keySet()) {
@@ -439,7 +454,7 @@ public final class OrbcraftStore implements PlayerStore {
                 used.put(kind, n);
             }
         }
-        return new TargetAllowance.Snapshot(key, tag.getLongOr("day", 0L), used);
+        return Optional.of(new TargetAllowance.Snapshot(key, tag.getLongOr("day", 0L), used));
     }
 
     private synchronized void writeSession(String key, long now) {
