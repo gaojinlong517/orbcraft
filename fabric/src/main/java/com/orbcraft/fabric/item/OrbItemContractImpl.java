@@ -3,6 +3,7 @@ package com.orbcraft.fabric.item;
 import java.util.Optional;
 
 import com.orbcraft.core.hatch.HatchTicket;
+import com.orbcraft.core.spec.ProductType;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.PlayerStore;
@@ -122,9 +123,10 @@ public final class OrbItemContractImpl implements OrbItemContract {
             return ThrowCheck.deny("这是别人的球");
         }
 
-        // 装备/消耗品这一版没有落地方案：投出去只会飞一段、被 S3 按契约拒绝、然后球消失，
-        // 玩家的观感是「我的装备凭空蒸发了」。宁可在手里拦下来。
-        if (!onStack.spec().isSummon()) {
+        // 召唤物（S3）与装备（equip 包）都有落地实现；消耗品还没有。
+        // 消耗品投出去只会飞一段、然后球消失，玩家的观感是「我的东西凭空蒸发了」，
+        // 所以它仍然拦在手里。新增产物类型时这里必须同步放开，否则就是同样的静默蒸发。
+        if (!onStack.spec().isSummon() && onStack.spec().type() != ProductType.EQUIPMENT) {
             return ThrowCheck.deny("「" + onStack.spec().displayName() + "」是"
                     + onStack.spec().type().zh() + "，这一版还不能落地，先留在手里");
         }

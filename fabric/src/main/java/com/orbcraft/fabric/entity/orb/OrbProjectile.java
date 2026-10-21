@@ -11,6 +11,7 @@ import com.orbcraft.core.spec.Spec;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.Services;
 import com.orbcraft.fabric.contract.SummonSpawner;
+import com.orbcraft.fabric.equip.EquipmentDeployer;
 import com.orbcraft.fabric.item.OrbItems;
 import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
@@ -191,7 +192,7 @@ public final class OrbProjectile extends ThrowableItemProjectile {
         markDirtyQuietly();
 
         // 服务里的票据是唯一真相，球上那份只在服务查不到时兜底。
-        summon(level, pos, OrbcraftRuntime.hatch().ticket(id).orElse(carried));
+        deployProduct(level, pos, OrbcraftRuntime.hatch().ticket(id).orElse(carried));
         this.discard();
     }
 
@@ -205,14 +206,22 @@ public final class OrbProjectile extends ThrowableItemProjectile {
     }
 
     /**
-     * 转交 S3。这里只负责「在哪个位置、给谁」，属性映射与外观选择都在 {@code SummonSpawner} 里。
+     * 按产物类型转交落地实现。这里只负责「在哪个位置、给谁」。
+     *
+     * <p>召唤物交给 S3 的 {@code SummonSpawner}（属性映射与外观选择都在那边）；
+     * 装备交给 {@code EquipmentDeployer}。两条路分开是因为它们的产物形态不同：
+     * 一个是世界里的实体、一个是背包里的物品，硬塞进同一个接口只会让契约变得含糊。
      */
-    private void summon(ServerLevel level, Vec3 pos, HatchTicket ticket) {
+    private void deployProduct(ServerLevel level, Vec3 pos, HatchTicket ticket) {
         if (ticket == null) {
             tell("球里的记录读不出来，这颗球没能生效");
             return;
         }
         Spec spec = ticket.spec();
+        if (!spec.isSummon()) {
+            deployEquipment(level, pos, spec);
+            return;
+        }
         SummonSpawner.SpawnResult result;
         try {
             result = Services.summonSpawner().spawn(level, pos, spec, this.ownerKey);
@@ -232,6 +241,20 @@ public final class OrbProjectile extends ThrowableItemProjectile {
         // 结论会是「这模组有 bug」，而不是「美术还没做完」。
         if (result.appearance().shouldWarnPlayer()) {
             tellAppearance(spec, result.appearance());
+        }
+    }
+
+    /**
+     * 装备落地：产出一件带属性的物品并交给投掷者。
+     *
+     * <p>与召唤物的区别在于「失败也要有交代」：召唤物失败时玩家什么都没得到，
+     * 装备失败时球已经消失了，所以这里必须把原因说出来，否则就是静默丢东西。
+     */
+    private void deployEquipment(ServerLevel level, Vec3 pos, Spec spec) {
+        EquipmentDeployer.Result result =
+                EquipmentDeployer.deploy(level, pos, spec, this.ownerKey);
+        if (!result.deployed()) {
+            tell("落地失败：" + result.reason());
         }
     }
 
