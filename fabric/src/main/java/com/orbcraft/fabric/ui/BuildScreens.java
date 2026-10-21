@@ -130,7 +130,9 @@ final class BuildScreens {
                     .append(button((chosen ? "✓ " : "") + option.title(),
                             chosen ? OK : ChatFormatting.WHITE,
                             "/orb card " + index,
-                            "词条 " + option.poolSize() + " 条，点一下选定（再点一次取消）")));
+                            "词条 " + option.poolSize() + " 条，点一下选定（再点一次取消）",
+                            iconOf(option.kind()),
+                            "词条 " + option.poolSize() + " 条")));
         }
         send(player, footer(
                 button(snap.canConfirm() ? "确认" : "确认（" + snap.confirmHint() + "）",
@@ -159,7 +161,9 @@ final class BuildScreens {
                     .append(button((picked ? "✓" : "") + "[" + (i + 1) + "] " + card.label(),
                             picked ? OK : colorOf(card.quality()),
                             "/orb card " + (i + 1),
-                            "点一下" + (picked ? "取消选择" : "选定") + "这一张")));
+                            "点一下" + (picked ? "取消选择" : "选定") + "这一张",
+                            "card",
+                            card.quality().zh() + " · " + card.points() + " 点")));
         }
         MutableComponent footer = footer(
                 button(snap.canConfirm() ? "确认" : "确认（" + snap.confirmHint() + "）",
@@ -343,8 +347,19 @@ final class BuildScreens {
      * 这个坑在 1.21 的 {@code Style} 上很容易踩。
      */
     private static MutableComponent button(String label, ChatFormatting color, String command, String hover) {
-        // 顺手登记给图形界面：命令、标签、色调都取自同一个来源，不会和聊天版漂移。
-        GUI_BUTTONS.add(new String[] {label, command, color.getName()});
+        return button(label, color, command, hover, "action", "");
+    }
+
+    /**
+     * 带图标与副标题的按钮（选项卡专用）。
+     *
+     * <p>副标题只允许填<b>真实存在</b>的字段：类型层有 {@code poolSize}、卡牌层有稀有度与点数。
+     * 没有字段可填就传空串 —— 编一句「强力」上去比没有副标题更糟。
+     */
+    private static MutableComponent button(String label, ChatFormatting color, String command, String hover,
+                                          String icon, String detail) {
+        // 顺手登记给图形界面：全部取自同一个来源，不会和聊天版漂移。
+        GUI_BUTTONS.add(new String[] {label, command, color.getName(), icon, detail});
         return Component.literal("[" + label + "]").withStyle(style -> style
                 .withColor(color)
                 .withClickEvent(new ClickEvent.RunCommand(command))
@@ -357,6 +372,18 @@ final class BuildScreens {
             case BLUE -> ChatFormatting.BLUE;
             case GOLD -> ChatFormatting.GOLD;
             case RED -> ChatFormatting.RED;
+        };
+    }
+
+    /** 产物类型 → 界面图标代号。界面端只认这几个字符串，新增类型必须同步。 */
+    private static String iconOf(BaseKind kind) {
+        if (kind == null) {
+            return "card";
+        }
+        return switch (kind) {
+            case EQUIPMENT -> "equip";
+            case SUMMON -> "summon";
+            case CONSUMABLE -> "consume";
         };
     }
 
