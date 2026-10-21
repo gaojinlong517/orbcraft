@@ -149,6 +149,102 @@ public final class IncubationService {
         return offlineCapTicks;
     }
 
+    // ------------------------------------------------------------------ 恢复
+
+    /** 恢复结果，供平台层打日志：只恢复 0 张票不一定是错，配额被修过一定要留痕。 */
+    public record RestoreResult(int restoredTickets, QuotaManager.State quota, boolean quotaRepaired) {
+    }
+
+    /**
+     * 从存档恢复一个玩家的孵化状态。
+     *
+     * <p><b>只接在途票据</b>（{@link HatchTicket#occupiesSlot()} 为真）：离手的球已经是
+     * 世界里的实体，它不该回到孵化栏；已落地/已失效的票据恢复进来只会让「同时孵化」
+     * 的计数虚高，玩家明明栏位是空的却被告知「已达上限 5 个」。
+     *
+     * <p><b>配额以存盘值为准</b>，不是从票据重算 —— 原因见 {@link HatchSnapshot}：
+     * 已落地的产物仍占配额，而它们不在票据列表里。只有一种情况例外：存盘配额
+     * <b>低于</b>在途票据本身所需（装备位、主宠位、混乱体位、统御力任一项），说明这份存档
+     * 只存了票据没存配额，或者写到一半崩了。此时按票据重算并标记
+     * {@code quotaRepaired} —— 宁可少给玩家一件装备的额度，也不能让存档损坏变成
+     * 「配额凭空清空、可以无限造」。
+     *
+     * <p><b>票据序号一并推进</b>。{@code nextTicketId()} 是进程内自增，重启后从 tk-1 重来；
+     * 若不按恢复的 id 把序号顶上去，新票据会复用一个还活着的 id，
+     * {@code tickets.put} 直接覆盖掉玩家在孵的那张球 —— 玩家的球被静默换成了另一个产物。
+     *
+     * @throws IllegalArgumentException 断面为空 / 票据归属与断面不一致 / 票据 id 重复
+     */
+    public synchronized RestoreResult restore(HatchSnapshot snapshot) {
+        if (snapshot == null) {
+            throw new IllegalArgumentException("snapshot 不能为空");
+        }
+        String ownerKey = snapshot.ownerKey();
+        requireOwner(ownerKey);
+
+        int restored = 0;
+        for (HatchTicket t : snapshot.tickets()) {
+            if (!t.ownerKey().equals(ownerKey)) {
+                throw new IllegalArgumentException("票据 " + t.ticketId() + " 的归属是 "
+                        + t.ownerKey() + "，与断面 " + ownerKey + " 不一致");
+            }
+            if (!t.occupiesSlot()) {
+                continue;
+            }
+            if (tickets.putIfAbsent(t.ticketId(), t) != null) {
+                throw new IllegalArgumentException("票据 id 重复：" + t.ticketId()
+                        + "，存档可能被重复写入");
+            }
+            ticketSeq = Math.max(ticketSeq, seqOf(t.ticketId()));
+            restored++;
+        }
+
+        QuotaManager.State fromTickets = occupyingQuota(ownerKey);
+        QuotaManager.State declared = snapshot.quota();
+        boolean repaired = declared.usedPoints() < fromTickets.usedPoints()
+                || declared.equipment() < fromTickets.equipment()
+                || declared.primary() < fromTickets.primary()
+                || declared.chaos() < fromTickets.chaos();
+        QuotaManager.State applied = repaired ? fromTickets : declared;
+        quotas.put(ownerKey, applied);
+        return new RestoreResult(restored, applied, repaired);
+    }
+
+    /** 该玩家在途票据所对应的最低配额占用，用于校验存档自洽。 */
+    private QuotaManager.State occupyingQuota(String ownerKey) {
+        int equipment = 0;
+        int primary = 0;
+        int chaos = 0;
+        int points = 0;
+        for (HatchTicket t : tickets.values()) {
+            if (!t.ownerKey().equals(ownerKey) || !t.occupiesSlot()) {
+                continue;
+            }
+            int cost = quota.costOf(t.spec());
+            switch (QuotaManager.categoryOf(t.spec())) {
+                case EQUIPMENT -> equipment++;
+                case PRIMARY -> primary++;
+                case CHAOS -> chaos++;
+                case FREE -> { }
+            }
+            points += cost;
+        }
+        return new QuotaManager.State(equipment, primary, chaos, points);
+    }
+
+    /** 从 {@code tk-<hex>} 里还原序号；格式不认识就返回 0（不认识的 id 由平台层决定，不在这里猜）。 */
+    private static long seqOf(String ticketId) {
+        String prefix = "tk-";
+        if (ticketId == null || !ticketId.startsWith(prefix)) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(ticketId.substring(prefix.length()), 16);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
+
     public int maxConcurrent() {
         return maxConcurrent;
     }

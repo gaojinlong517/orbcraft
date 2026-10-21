@@ -31,7 +31,8 @@ for cls in \
     com.orbcraft.core.target.TargetSelfTest \
     com.orbcraft.core.render.CarrierModelSelfTest \
     com.orbcraft.core.hatch.HatchPipelineSelfTest \
-    com.orbcraft.core.integration.TargetWiringSelfTest
+    com.orbcraft.core.integration.TargetWiringSelfTest \
+    com.orbcraft.core.integration.PersistenceSelfTest
 do
     short=$(echo "$cls" | sed 's/com.orbcraft.core.//')
     out=$(java -cp "$OUT" -Dstdout.encoding=UTF-8 "$cls" 2>&1)
@@ -53,6 +54,40 @@ if [ -x "$NODE" ] || command -v "$NODE" >/dev/null 2>&1; then
     "$NODE" tools/validate-cards.mjs 2>&1 | tail -3
 else
     echo "（未找到 node，跳过）"
+fi
+
+echo ""
+echo "=== 4. 契约冻结（fabric/contract 只允许加方法）==="
+if command -v python >/dev/null 2>&1; then
+    python tools/contract-freeze.py > /tmp/oc_contract.log 2>&1
+    if [ $? -ne 0 ]; then
+        cat /tmp/oc_contract.log
+        FAIL=1
+    else
+        grep -E "^  [A-Z]" /tmp/oc_contract.log
+        echo "契约未变"
+    fi
+else
+    echo "（未找到 python，跳过）"
+fi
+
+echo ""
+echo "=== 5. fabric 编译 ==="
+# core 的 javac 只覆盖 core/src，fabric 这条路一旦有人改了契约却不改实现，
+# 上面几步全都还是绿的 —— 编译 fabric 是唯一能发现的地方。
+# 设 SKIP_FABRIC=1 可跳过（离线环境 / 只想快速跑规则层时）。
+if [ "${SKIP_FABRIC:-0}" = "1" ]; then
+    echo "（SKIP_FABRIC=1，跳过）"
+elif [ -x ./gradlew ]; then
+    if ./gradlew compileJava -q > /tmp/oc_fabric.log 2>&1; then
+        echo "fabric 编译通过（含契约实现方）"
+    else
+        echo "fabric 编译失败："
+        tail -25 /tmp/oc_fabric.log
+        FAIL=1
+    fi
+else
+    echo "（未找到 gradlew，跳过）"
 fi
 
 echo ""

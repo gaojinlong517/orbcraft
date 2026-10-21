@@ -82,19 +82,45 @@ gradle/wrapper/              Gradle 9.8.1 wrapper
 fabric/src/main/java/com/orbcraft/fabric/
     OrbcraftMod.java         main 入口（双端）
     client/OrbcraftClient.java   client 入口（仅客户端）
+    contract/                三份并行契约 + Services 取用点（只读，见下）
 fabric/src/main/resources/
     fabric.mod.json          模组元数据（version 由构建期展开）
+tools/
+    verify-all.sh            统一验收：编译 + 9 套自测 + 数据护栏 + 契约冻结 + fabric 编译
+    contract-freeze.py       契约面检查（只允许加方法）
+    contracts.lock           契约签名锁
 ```
 
 `core/src/main/java` 与 `core/src/main/resources` 被**直接并入 main sourceSet**
 （见 `build.gradle`）。core 零 MC 依赖，做成独立 Gradle 子项目只多一层 project 依赖，
 收益为零。等 core 要被别的加载器复用时再拆。
 
+## 契约（`contract/` 包）
+
+五路并行时唯一共用的接口面，**只读**：
+
+| 契约 | 实现方 | 管什么 |
+|---|---|---|
+| `OrbItemContract` | S1 `orb-item` | 票据 ↔ 球物品；能否投掷（含归属） |
+| `SummonSpawner` | S3 `spawner` | Spec → 实体 / 属性 / AI；归属查询 |
+| `PlayerStore` | S4 `persistence` | 配额 + 在途票据 + 定向账本的持久化 |
+
+`Services` 是运行期取用点（`Services.summonSpawner()` 这样拿实现），
+让 S1 在 S3 还没写完时也能编译。没注册时会抛一条写明原因的错误，那是预期行为。
+
+**改契约要过检查**：
+
+```bash
+python tools/contract-freeze.py           # 检查：删方法 / 改签名会红
+python tools/contract-freeze.py --write   # 主线评审后更新锁文件
+```
+
 ## 包的所有权（五路并行时按这个切）
 
 | 子包 | 主人 | 内容 |
 |---|---|---|
 | `fabric/`（根 Gradle 文件、`fabric.mod.json`） | `skeleton` | 版本锁、entrypoint、run 配置 |
+| `.../contract/`、`.../contract/Services.java` | **主线** | 三份契约，只读 |
 | `.../item/`、`.../entity/orb/` | `orb-item` | 球物品、投掷物、命中判定、耐久条 |
 | `.../command/`、`.../ui/` | `build-ui` | 构筑命令树、可点击文本、快照渲染 |
 | `.../spawn/`、`.../mapping/` | `spawner` | Spec → 实体/属性映射 |
