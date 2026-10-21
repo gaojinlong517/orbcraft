@@ -1,6 +1,6 @@
 # ============================================================
 # orbcraft - git ignore rules
-# repo root = the directory containing docs/ and orbcraft/
+# repo root = the directory containing core/ docs/ fabric/ tools/
 # ============================================================
 
 # ---- Local tool state (WorkBuddy workspace data) ----
@@ -15,7 +15,11 @@ replay_pid*
 
 # ---- Gradle ----
 .gradle/
-build/
+# 只匹配模块根的构建目录（/build、/core/build、/fabric/build）。
+# 绝对不要写成裸的 `build/`：那会连源码包 com/orbcraft/core/build 一起忽略，
+# 而且 git status 里看不出来 —— 你以为提交了，实际整个包都不在仓库里。
+/build/
+/*/build/
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
 

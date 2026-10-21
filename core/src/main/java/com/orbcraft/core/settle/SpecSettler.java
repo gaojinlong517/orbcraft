@@ -112,7 +112,7 @@ public final class SpecSettler {
      * QuotaManager 判断「占不占配额」的前提；召唤物则必须明确是攻击 / 守护 / 混乱，
      * 否则 tryConsume 拿不到类别，会静默按 CHAOS 处理。
      */
-    private static BehaviorMode resolveBehavior(ProductType type, BehaviorMode requested) {
+    static BehaviorMode resolveBehavior(ProductType type, BehaviorMode requested) {
         boolean staticType = type == ProductType.EQUIPMENT || type == ProductType.CONSUMABLE;
         if (staticType) {
             if (requested != BehaviorMode.NONE) {
@@ -128,8 +128,8 @@ public final class SpecSettler {
         return requested;
     }
 
-    private static void collect(PickedSlot slot, Map<String, Double> attrs,
-                                Set<String> tags, List<String> fragments) {
+    static void collect(PickedSlot slot, Map<String, Double> attrs,
+                        Set<String> tags, List<String> fragments) {
         Affix affix = slot.affix();
         Layer layer = slot.layer();
         double value = slot.tier().value();
@@ -162,7 +162,7 @@ public final class SpecSettler {
     }
 
     /** 取 id 的第 index 段；不足时返回整串，避免数据短缺时抛空指针。 */
-    private static String segment(String id, int index) {
+    static String segment(String id, int index) {
         String[] parts = id.split("\\.");
         return parts.length > index ? parts[index] : id;
     }
