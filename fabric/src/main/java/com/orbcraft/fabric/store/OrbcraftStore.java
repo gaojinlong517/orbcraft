@@ -3,8 +3,6 @@ package com.orbcraft.fabric.store;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -309,10 +307,13 @@ public final class OrbcraftStore implements PlayerStore {
      * 去掉「服务里已经有一张同 id 的票」的那些。
      *
      * <p>{@code IncubationService} 没有移除票据的接口，{@code restore} 撞到重复 id 会直接抛，
-     * 而这条路径在登录事件里 —— 抛出去就是玩家进不了服。重复只可能来自两种情况：
-     * 同一进程内重登（票本来还在内存里，而且可能已经从 CHARGING 走到 READY），
-     * 或同一 JVM 换了存档。两种都以<b>内存里的版本为准</b>：那只球还在玩家手里／世界里，
-     * 存档里的只是它上一次落盘时的样子。
+     * 而这条路径在登录事件里 —— 抛出去就是玩家进不了服。重复的来源是同一进程内重登：
+     * 票本来还在内存里，而且可能已经从 CHARGING 走到 READY。这种情况以<b>内存里的版本为准</b>
+     * ——那只球还在玩家手里，存档里的只是它上一次落盘时的样子。
+     *
+     * <p>换世界（单人退出存档再进另一个世界）不再靠这里兜：主线在 {@code SERVER_STOPPED}
+     * 调 {@code OrbcraftRuntime.resetForNewWorld()} 整体重建，票据表本来就不会带过来。
+     * 这个过滤留着是第二道保险，成本是一个最多 5 张票的循环。
      */
     private HatchSnapshot withoutTicketsAlreadyInMemory(HatchSnapshot snapshot) {
         List<HatchTicket> keep = new ArrayList<>(snapshot.tickets().size());
@@ -325,7 +326,7 @@ public final class OrbcraftStore implements PlayerStore {
         if (keep.size() == snapshot.tickets().size()) {
             return snapshot;
         }
-        OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 有 {} 张票已在内存里（重登或换存档），按内存版本为准，"
+        OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 有 {} 张票已在内存里（重登），按内存版本为准，"
                         + "只用存档恢复其余 {} 张",
                 snapshot.ownerKey(), snapshot.tickets().size() - keep.size(), keep.size());
         return new HatchSnapshot(snapshot.ownerKey(), snapshot.quota(), keep);
@@ -622,36 +623,41 @@ public final class OrbcraftStore implements PlayerStore {
     }
 
     /**
-     * 日历天序号，给 {@link #useTarget} 用。
+     * 日历天序号，给 {@link #useTarget} 用 —— 转发给 {@link OrbcraftRuntime#todayEpochDay()}。
      *
-     * <p><b>用服务器本地时区，不是 UTC。</b> 日期边界必须和玩家的作息对齐：按 UTC 算，
-     * 东八区的额度刷新点落在早上 8 点 —— 玩家熬到 8 点就能白拿一次当天额度，而
-     * 「今天」在玩家眼里和服务器眼里也不是同一天。改成系统时区后刷新点落在本地零点。
+     * <p>保留这个静态方法只是为了让 S2 的调用点不用改。<b>不要在这里自己算日期</b>：
+     * 这个值是额度表的键，两处各算一份，跨零点就会「构筑记在 D 日、存档按 D-1 日写」，
+     * 重启后额度自己回来。为什么用本地时区而不是 UTC，见 runtime 里的注释。
      */
     public static long todayEpochDay() {
-        return LocalDate.now(ZoneId.systemDefault()).toEpochDay();
+        return OrbcraftRuntime.todayEpochDay();
     }
 
     /**
      * 标记某人的状态已变更，尽快落盘（submit / deploy / 定向卡使用后调用）。
      *
+     * <p><b>覆盖契约的默认空实现</b>，这一点是必须的：契约给的
+     * {@link PlayerStore#markDirty} 是个空方法，调用方写的是
+     * {@code Services.playerStore().markDirty(...)}，这里没覆盖就等于「接好了但什么都没发生」——
+     * 编译过、日志干净、数据丢。
+     *
      * <p><b>不是「马上写」</b>：这个方法会在命令回调与事件里被调用，同步 IO 会卡主线程。
      * 它只把 ownerKey 记进待保存集合，由 {@code END_SERVER_TICK} 每
      * {@link #DIRTY_FLUSH_INTERVAL_TICKS} 批量刷一次；关服与退出时也会刷。
      *
-     * <p>S2 走这个而不是 {@link #saveNow}：后者是同步写，只留给「下线」这种一次性时刻。
-     *
      * @throws IllegalArgumentException {@code ownerKey} 为空（调用方自己拼了键，是 bug）
      */
-    public static void markDirty(String ownerKey) {
+    @Override
+    public void markDirty(String ownerKey) {
         if (ownerKey == null || ownerKey.isBlank()) {
             throw new IllegalArgumentException("ownerKey 不能为空：它是所有账本的键");
         }
-        synchronized (INSTANCE) {
-            INSTANCE.markDirtyLocked(ownerKey);
+        synchronized (this) {
+            markDirtyLocked(ownerKey);
         }
     }
 
+    /** 已有的锁内实现，供静态入口（{@link #useTarget}）内联调用。 */
     private void markDirtyLocked(String ownerKey) {
         dirty.add(ownerKey);
     }
