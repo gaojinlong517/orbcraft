@@ -28,6 +28,7 @@ import java.util.List;
  * @param requiredShapePick      形态层应选张数（恒为 1）
  * @param requiredModifierPick   修饰层应选张数
  * @param requiredEffectPick     效果层应选张数
+ * @param shapeRerollsLeft       形态层剩余「换一批」次数；0 时 UI 不该再显示换批按钮
  * @param canConfirm             当前能否确认
  * @param confirmHint            还差什么；已满足为空串
  * @param confirmedCards         已确认的卡（跨层累计，顺序为 形态 → 修饰 → 效果）
@@ -43,6 +44,7 @@ public record BuildSnapshot(
         int requiredShapePick,
         int requiredModifierPick,
         int requiredEffectPick,
+        int shapeRerollsLeft,
         boolean canConfirm,
         String confirmHint,
         List<DraftCard> confirmedCards,
@@ -72,7 +74,18 @@ public record BuildSnapshot(
         return phase == BuildPhase.FINISHED;
     }
 
-    /** 一行状态栏文案，如「修饰层 0/1 · 可确认」。 */
+    /** 当前能否换一批。形态层未选择且还有次数 —— 与 {@code BuildSession.rerollShape()} 的准入条件一致。 */
+    public boolean canRerollShape() {
+        return (phase == BuildPhase.SHAPE_CHOOSING) && shapeRerollsLeft > 0;
+    }
+
+    /**
+     * 一行状态栏文案，如「修饰层 0/1 · 可确认」「形态层 0/1 · 请选择 1 个形态 · 可换批 ×1」。
+     *
+     * <p>剩余次数为 0 时<b>不出现</b>换批字样：留着「可换批 0 次」只会让玩家反复点，
+     * 点一次报一次错。按钮该跟着这句话一起消失。已选中形态（待确认）时同样不提示 ——
+     * 那句话只描述<b>当下可点</b>的动作，不描述「取消选择后还能点」。
+     */
     public String statusLine() {
         if (phase.isTerminal()) {
             return phase == BuildPhase.FINISHED ? "已定稿" : "已放弃";
@@ -85,6 +98,10 @@ public record BuildSnapshot(
             return "类型层 · 已选「" + (kind == null ? "—" : kind.zh()) + "」· 可确认";
         }
         String head = phase.layerZh() + " · " + chosen.size() + "/" + requiredPickCount();
-        return canConfirm ? head + " · 可确认" : head + " · " + confirmHint;
+        String state = canConfirm ? head + " · 可确认" : head + " · " + confirmHint;
+        if (canRerollShape()) {
+            return state + " · 可换批 ×" + shapeRerollsLeft;
+        }
+        return state;
     }
 }

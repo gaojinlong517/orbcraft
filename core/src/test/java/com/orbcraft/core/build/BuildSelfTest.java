@@ -6,6 +6,7 @@ import com.orbcraft.core.draft.BaseKind;
 import com.orbcraft.core.draft.DraftCard;
 import com.orbcraft.core.draft.Layer;
 import com.orbcraft.core.draft.Tier;
+import com.orbcraft.core.draft.TierData;
 import com.orbcraft.core.settle.CompositionSettler;
 import com.orbcraft.core.settle.HatchTime;
 import com.orbcraft.core.settle.MaterialTier;
@@ -23,9 +24,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 构筑流程自测 —— 用真实 1124 条卡表跑，不用假数据。
@@ -59,8 +62,10 @@ public final class BuildSelfTest {
         typeLayerRules();
         confirmIsTheOnlyDoor();
         shapeLayerRules();
+        shapeRerollRules();
         shapeBeforeModifier();
         modifierLayerRules();
+        modifierDoublePick();
         effectLayerAndFinish();
         noTradingSurface();
         seedReproducible();
@@ -68,6 +73,7 @@ public final class BuildSelfTest {
         terminalRules();
         settleBridge();
         simulate(300);
+        rarityDrift();
 
         System.out.println();
         System.out.println("通过 " + passed + " / 失败 " + failed);
@@ -217,6 +223,185 @@ public final class BuildSelfTest {
         check("索引越界被拒", throwsCode(BuildException.Code.INDEX_OUT_OF_RANGE, () -> s.choose(5)), "");
     }
 
+    // ================================================================ 形态层换一批
+
+    /**
+     * 换批的三条硬约束：
+     * <ol>
+     *   <li>只减不增，用尽必报错 —— 否则等于把「无限重开」换了个名字搬回来；</li>
+     *   <li>不出现本构筑已发过的载体 —— 否则玩家会认为按钮坏了；</li>
+     *   <li>不改变任何数值口径 —— 换批只是重看待选，不是重掷命运。</li>
+     * </ol>
+     */
+    private static void shapeRerollRules() {
+        section("形态层换一批");
+
+        check("默认换批次数为 1", config.shapeRerolls() == 1, "" + config.shapeRerolls());
+        check("换批次数上限为 3", BuildConfig.MAX_SHAPE_REROLLS == 3, "" + BuildConfig.MAX_SHAPE_REROLLS);
+        check("换批次数 4 被拒", throwsBadConfig(() -> BuildConfig.defaults().withShapeRerolls(4)), "");
+        check("换批次数 -1 被拒", throwsBadConfig(() -> BuildConfig.defaults().withShapeRerolls(-1)), "");
+        check("换批次数 0 合法（关掉换批）",
+                BuildConfig.defaults().withShapeRerolls(0).shapeRerolls() == 0, "0");
+
+        // ---- 次数递减与耗尽
+        BuildSession s = startShape(BuildConfig.defaults().withShapeRerolls(2), BaseKind.EQUIPMENT, 2024L);
+        check("初始余量等于配置值", s.shapeRerollsLeft() == 2, "" + s.shapeRerollsLeft());
+        check("首批 5 张载体", s.cards().size() == 5, "" + s.cards().size());
+        check("有次数时状态栏提示可换批",
+                s.snapshot().statusLine().contains("可换批"), s.snapshot().statusLine());
+        check("快照余量与状态机一致", s.snapshot().shapeRerollsLeft() == 2,
+                "" + s.snapshot().shapeRerollsLeft());
+
+        List<String> batch1 = idsOf(s.cards());
+        s.rerollShape();
+        check("换批一次后余量为 1", s.shapeRerollsLeft() == 1, "" + s.shapeRerollsLeft());
+        List<String> batch2 = idsOf(s.cards());
+        s.rerollShape();
+        check("换批两次后余量为 0", s.shapeRerollsLeft() == 0, "" + s.shapeRerollsLeft());
+        List<String> batch3 = idsOf(s.cards());
+        check("次数用尽后换批抛 REROLL_EXHAUSTED",
+                throwsCode(BuildException.Code.REROLL_EXHAUSTED, s::rerollShape), "");
+        check("次数用尽后状态栏不再提示换批",
+                !s.snapshot().statusLine().contains("可换批"), s.snapshot().statusLine());
+        check("次数用尽后快照 canRerollShape 为 false", !s.snapshot().canRerollShape(), "");
+
+        // ---- 排除已见载体（装备 12 个载体，前两批 10 个够用，必然不重叠）
+        check("换批后仍是 5 张", batch2.size() == 5 && batch3.size() == 5,
+                batch2.size() + "/" + batch3.size());
+        check("第二批与第一批没有重叠载体",
+                disjoint(batch1, batch2), batch1 + " vs " + batch2);
+        check("新批不会等于刚作废的那批",
+                !batch2.equals(batch3) && !batch1.equals(batch2), "");
+
+        // 12 个载体 - 前两批 10 个 = 2 个新鲜，第三批必须至少带 1 个没见过的
+        Set<String> seenBeforeThird = new LinkedHashSet<>(batch1);
+        seenBeforeThird.addAll(batch2);
+        boolean freshInThird = false;
+        for (String id : batch3) {
+            if (!seenBeforeThird.contains(id)) {
+                freshInThird = true;
+                break;
+            }
+        }
+        check("候选不足时优先回收最久未出现的载体（第三批含新载体）", freshInThird,
+                "已见 " + seenBeforeThird.size() + " 个，第三批 " + batch3);
+
+        for (int i = 0; i < 3; i++) {
+            List<String> batch = List.of(batch1, batch2, batch3).get(i);
+            check("第 " + (i + 1) + " 批载体族互异", distinctStrings(batch) == 5, batch.toString());
+        }
+
+        // ---- 换批后形态层选择被清空、阶段不变
+        check("换批后回到形态层选择态", s.phase() == BuildPhase.SHAPE_CHOOSING, "" + s.phase());
+        check("换批后本层无已选", s.chosen().isEmpty(), s.chosen().toString());
+        check("换批不产生已确认卡", s.confirmedCards().isEmpty(), "" + s.confirmedCards().size());
+        check("换批不改变本层选取数", s.snapshot().requiredPickCount() == 1,
+                "" + s.snapshot().requiredPickCount());
+
+        // ---- 阶段与错误码
+        BuildSession selecting = startShape(BaseKind.SUMMON, 31L);
+        selecting.choose(1);
+        check("已选形态（待确认）时换批被拒 WRONG_PHASE",
+                throwsCode(BuildException.Code.WRONG_PHASE, selecting::rerollShape), "" + selecting.phase());
+        check("被拒后已选仍在（不做隐式清空）", selecting.chosen().size() == 1, selecting.chosen().toString());
+        selecting.confirm();
+        check("修饰层换批被拒 WRONG_PHASE",
+                throwsCode(BuildException.Code.WRONG_PHASE, selecting::rerollShape), "" + selecting.phase());
+
+        BuildSession typeStage = new BuildSession(table, config, 32L);
+        typeStage.choose(0);
+        check("类型层换批被拒 WRONG_PHASE",
+                throwsCode(BuildException.Code.WRONG_PHASE, typeStage::rerollShape), "" + typeStage.phase());
+
+        BuildSession noReroll = startShape(BuildConfig.defaults().withShapeRerolls(0), BaseKind.SUMMON, 33L);
+        check("配置 0 次时首次换批即耗尽",
+                throwsCode(BuildException.Code.REROLL_EXHAUSTED, noReroll::rerollShape), "");
+        check("耗尽后仍能正常选牌推进", proceedAfterRerollFailure(noReroll), "" + noReroll.phase());
+
+        BuildSession finished = playFixedSession(BaseKind.CONSUMABLE, 34L);
+        check("完成后换批被拒 WRONG_PHASE",
+                throwsCode(BuildException.Code.WRONG_PHASE, finished::rerollShape), "" + finished.phase());
+
+        // ---- 可复现：同 seed 同换批路径 → 同结果
+        BuildSession r1 = startShape(BuildConfig.defaults().withShapeRerolls(1), BaseKind.SUMMON, 777L);
+        BuildSession r2 = startShape(BuildConfig.defaults().withShapeRerolls(1), BaseKind.SUMMON, 777L);
+        r1.rerollShape();
+        r2.rerollShape();
+        check("同 seed 换批结果一致", sameIds(r1.cards(), r2.cards()), "");
+        BuildSession r3 = startShape(BuildConfig.defaults().withShapeRerolls(1), BaseKind.SUMMON, 778L);
+        r3.rerollShape();
+        check("不同 seed 换批结果不同", !sameIds(r1.cards(), r3.cards()), "");
+
+        // ---- 品质重新掷：换批后这一批的档位由新一次 roll 决定，与旧批无继承关系
+        BuildSession tiers = startShape(BuildConfig.defaults().withShapeRerolls(1), BaseKind.EQUIPMENT, 909L);
+        List<Tier> before = qualityOf(tiers.cards());
+        tiers.rerollShape();
+        check("换批后每张牌都重新掷过品质且点数与档位自洽",
+                tiers.cards().size() == 5
+                        && tiers.cards().stream().allMatch(c -> c.points() == c.tier().tier().designPoints()),
+                before + " → " + qualityOf(tiers.cards()));
+
+        // ---- 换批不改变 Composition 的任何数值口径
+        Composition withReroll = playWithReroll(BaseKind.EQUIPMENT, 515L);
+        check("换批后产物仍为 3 张", withReroll.size() == 3, "" + withReroll.size());
+        check("换批后平均点数 = 总点数 / 张数",
+                Math.abs(withReroll.avgPoints() - (double) withReroll.totalPoints() / withReroll.size()) < 1e-9,
+                withReroll.totalPoints() + "/" + withReroll.size());
+        check("换批后稀有度仍按平均点数判定",
+                withReroll.rarity() == config.rarityOf(withReroll.avgPoints()),
+                withReroll.rarity() + " avg=" + withReroll.avgPoints());
+        check("换批后孵化倍率口径不变",
+                Math.abs(withReroll.hatchMultiplier() - expectedHatch(withReroll, config)) < 1e-9,
+                withReroll.hatchMultiplier() + " vs " + expectedHatch(withReroll, config));
+        report("换批样例", withReroll.brief());
+
+        // 300 局中随机换批，全程不崩、产物张数稳定
+        int crash = 0;
+        int badDeal = 0;
+        for (int i = 0; i < 300; i++) {
+            try {
+                Composition c = playOneRandomReroll(i);
+                if (c.size() != 3) {
+                    badDeal++;
+                }
+            } catch (RuntimeException e) {
+                crash++;
+            }
+        }
+        check("300 局随机换批无异常", crash == 0, crash + " 局失败");
+        check("300 局随机换批产物张数稳定", badDeal == 0, badDeal + " 局张数异常");
+
+        // 极端回收：消耗品只有 10 个载体，却要发 9 张、换 2 次（共 27 个位置）
+        // 这是唯一会让「新批整批撞回旧批」真实发生的配置，专门压它。
+        BuildConfig dense = BuildConfig.defaults().withDealCounts(9, 5, 5).withShapeRerolls(2);
+        int identical = 0;
+        int shortBatch = 0;
+        int recycledCrash = 0;
+        for (int i = 0; i < 40; i++) {
+            try {
+                BuildSession d = startShape(dense, BaseKind.CONSUMABLE, 5000L + i);
+                List<String> prev = idsOf(d.cards());
+                for (int k = 0; k < 2; k++) {
+                    d.rerollShape();
+                    List<String> now = idsOf(d.cards());
+                    if (now.equals(prev)) {
+                        identical++;
+                    }
+                    if (now.size() != 9) {
+                        shortBatch++;
+                    }
+                    prev = now;
+                }
+            } catch (RuntimeException e) {
+                recycledCrash++;
+            }
+        }
+        check("40 局极端回收（10 载体发 9 张换 2 次）无异常", recycledCrash == 0,
+                recycledCrash + " 局失败");
+        check("极端回收下每批仍发满 9 张", shortBatch == 0, shortBatch + " 批不足 9 张");
+        check("极端回收下新批从不与刚作废那批完全相同", identical == 0, identical + " 次重合");
+    }
+
     // ================================================================ 形态 → 修饰 的先后
 
     private static void shapeBeforeModifier() {
@@ -294,6 +479,118 @@ public final class BuildSelfTest {
         check("效果层已发 5 张", s.cards().size() == 5, "实际 " + s.cards().size());
     }
 
+    // ================================================================ 修饰层双选
+
+    /**
+     * {@code modifierPickCount = 2} 的全流程。
+     *
+     * <p>默认值必须是 1 —— 双选不是「新标准」，是一个能被配置打开的变体；
+     * 改默认值就等于把每个已有存档的产物口径悄悄换掉。
+     *
+     * <p>双选下最容易错的三处：<b>同族两张</b>（会叠两次同一强化）、
+     * <b>类目张数</b>（Composition 应变成 4 张）、<b>稀有度基准</b>
+     * （4 张的均值与 3 张的均值不可比，必须仍然按<b>平均</b>点数算，而不是总和）。
+     */
+    private static void modifierDoublePick() {
+        section("修饰层双选（modifierPickCount = 2）");
+
+        BuildConfig pick1 = BuildConfig.defaults();
+        BuildConfig pick2 = pick1.withModifierPickCount(2);
+        check("默认修饰选取数仍为 1（向后兼容）", pick1.modifierPickCount() == 1, "" + pick1.modifierPickCount());
+        check("withModifierPickCount(2) 只改选取数",
+                pick2.modifierPickCount() == 2 && pick2.modifierDealCount() == 5
+                        && pick2.effectPickCount() == 1 && pick2.shapeRerolls() == pick1.shapeRerolls(),
+                pick2.toString());
+
+        BuildSession s = startModifier(pick2, BaseKind.EQUIPMENT, 4242L);
+        List<DraftCard> cands = s.cards();
+        check("双选：候选仍发 5 张", cands.size() == 5, "" + cands.size());
+        check("双选：候选 5 张族互异（同族无从被选中）", distinctFamilies(cands) == 5,
+                "" + distinctFamilies(cands));
+
+        s.choose(0);
+        check("双选：只选 1 张不可确认", !s.canConfirm(), s.confirmHint());
+        check("双选：只选 1 张确认被拒",
+                throwsCode(BuildException.Code.NOT_ENOUGH_CHOICES, s::confirm), s.confirmHint());
+
+        s.choose(1);
+        check("双选：选满 2 张可确认", s.canConfirm(), s.confirmHint());
+        check("双选：已选索引为 {0,1}", s.chosen().equals(List.of(0, 1)), s.chosen().toString());
+        check("双选：超选第 3 张被拒",
+                throwsCode(BuildException.Code.TOO_MANY_CHOICES, () -> s.choose(2)), "上限 2");
+        check("双选：两张候选族不同",
+                !cands.get(0).family().equals(cands.get(1).family()),
+                cands.get(0).family() + " vs " + cands.get(1).family());
+
+        // 取消再选：两张都取消后回到选择态
+        s.choose(1);
+        s.choose(0);
+        check("双选：全部取消后回到选择态", s.phase() == BuildPhase.MODIFIER_CHOOSING
+                && s.chosen().isEmpty(), "" + s.phase() + s.chosen());
+        s.choose(0);
+        s.choose(1);
+
+        s.confirm();
+        check("双选：确认后进入效果层", s.phase() == BuildPhase.EFFECT_CHOOSING, "" + s.phase());
+        check("双选：已确认 3 张（形态 + 2 修饰）", s.confirmedCards().size() == 3,
+                "" + s.confirmedCards().size());
+        check("双选：效果层发 5 张", s.cards().size() == 5, "" + s.cards().size());
+        List<String> modFamilies = List.of(cands.get(0).family(), cands.get(1).family());
+        check("双选：效果牌族与两张修饰都不同（两族都已进 usedFamilies）",
+                s.cards().stream().noneMatch(x -> modFamilies.contains(x.family())),
+                layerOrder(s.cards()));
+        s.choose(0);
+        Composition c = s.confirm().orElseThrow();
+
+        check("双选：组合共 4 张（1 载体 + 2 修饰 + 1 效果）", c.size() == 4, "" + c.size());
+        check("双选：载体 1 张", c.carrierCard().isPresent(), "");
+        check("双选：修饰 2 张", c.modifiers().size() == 2, "" + c.modifiers().size());
+        check("双选：效果 1 张", c.effects().size() == 1, "" + c.effects().size());
+        check("双选：两张修饰族不同（无同族叠加）",
+                c.modifiers().stream().map(DraftCard::family).distinct().count() == 2,
+                c.modifiers().get(0).family() + " vs " + c.modifiers().get(1).family());
+        check("双选：卡牌顺序仍为 载体→修饰→效果",
+                c.cards().get(0).affix().layer() == Layer.CARRIER
+                        && c.cards().get(3).affix().layer() == Layer.EFFECT, layerOrder(c));
+        check("双选：平均点数按 4 张算",
+                Math.abs(c.avgPoints() - (double) c.totalPoints() / 4) < 1e-9,
+                c.totalPoints() + "/4 = " + c.avgPoints());
+        check("双选：稀有度按平均点数（不是总和）",
+                c.rarity() == pick2.rarityOf(c.avgPoints()),
+                c.rarity() + " avg=" + c.avgPoints());
+        check("双选：孵化倍率按 4 张计",
+                Math.abs(c.hatchMultiplier() - expectedHatch(c, pick2)) < 1e-9,
+                c.hatchMultiplier() + " vs " + expectedHatch(c, pick2));
+        check("双选：brief 含两张修饰",
+                c.brief().split(" / ").length == 4, c.brief());
+        check("双选：describe 不崩且列出 4 张卡",
+                c.describe().lines().count() == 6, c.describe().replace("\n", " | "));
+        check("双选：能正常结算成 Spec（4 张不破坏结算桥）",
+                CompositionSettler.settle(c, SettleRequest.of("player-double", MaterialTier.MASTERWORK))
+                        .type() == ProductType.EQUIPMENT, "");
+        report("双选样例", c.brief());
+
+        // ---- 同族拒绝的判据（直接打在 commit 用的那个校验函数上）
+        List<DraftCard> sameFamily = twoCardsOfSameFamily();
+        check("同族判据：同族两张 → distinctFamilyCount = 1",
+                BuildSession.distinctFamilyCount(sameFamily) == 1, "" + sameFamily);
+        check("同族两张被 requireDistinctFamilies 拒绝",
+                throwsCode(BuildException.Code.FAMILY_CONFLICT,
+                        () -> BuildSession.requireDistinctFamilies(sameFamily)),
+                sameFamily.toString());
+        check("异族两张不被拒绝", !throwsCode(BuildException.Code.FAMILY_CONFLICT,
+                () -> BuildSession.requireDistinctFamilies(cands.subList(0, 2))), "");
+
+        // ---- 配置化：发 3 选 2 也要能走完，且不得出现同族
+        BuildConfig small = BuildConfig.defaults().withDealCounts(3, 3, 3).withModifierPickCount(2);
+        Composition smallC = playFixed(small, BaseKind.SUMMON, 88L);
+        check("发 3 选 2：组合共 4 张", smallC.size() == 4, "" + smallC.size());
+        check("发 3 选 2：修饰 2 张且族不同",
+                smallC.modifiers().size() == 2
+                        && smallC.modifiers().stream().map(DraftCard::family).distinct().count() == 2,
+                smallC.brief());
+    }
+
     // ================================================================ 效果层与收尾
 
     private static void effectLayerAndFinish() {
@@ -347,8 +644,12 @@ public final class BuildSelfTest {
     // ================================================================ 无交易面
 
     private static void noTradingSurface() {
-        section("非交易型：没有购买/刷新/扣费入口");
+        section("非交易型：没有购买/无限刷新/扣费入口");
 
+        // rerollShape 是唯一一个带 reroll 字样的入口，它是<b>有限次</b>的（次数为 0 时抛
+        // REROLL_EXHAUSTED），因此不在「免费刷新」之列；shapeRerollsLeft 只是它的只读余量。
+        // 下面单独断言它们的有限性。
+        List<String> allowed = List.of("rerollShape", "shapeRerollsLeft");
         List<String> forbidden = List.of("deal", "reroll", "buy", "pay", "spend", "points",
                 "budget", "cost", "orb");
         List<String> exposed = new ArrayList<>();
@@ -359,6 +660,9 @@ public final class BuildSelfTest {
                 continue;
             }
             methods.add(m.getName());
+            if (allowed.contains(m.getName())) {
+                continue;
+            }
             String lower = m.getName().toLowerCase();
             for (String bad : forbidden) {
                 if (lower.contains(bad)) {
@@ -366,8 +670,14 @@ public final class BuildSelfTest {
                 }
             }
         }
-        check("BuildSession 无公开的 deal/reroll/购买类方法", exposed.isEmpty(), exposed.toString());
-        check("公开方法数量合理（≤ 20）", methods.size() <= 20, "" + methods.size() + " 个：" + methods);
+        check("BuildSession 无公开的 deal/购买/免费刷新类方法", exposed.isEmpty(), exposed.toString());
+        check("公开方法数量合理（≤ 22）", methods.size() <= 22, "" + methods.size() + " 个：" + methods);
+
+        // rerollShape 必须是有上限的：次数减到 0 后必然拒绝，不会退化成无限刷新
+        BuildSession limited = startShape(BuildConfig.defaults().withShapeRerolls(1), BaseKind.EQUIPMENT, 6L);
+        limited.rerollShape();
+        check("唯一的 reroll 入口是有限次的（用尽即拒）",
+                throwsCode(BuildException.Code.REROLL_EXHAUSTED, limited::rerollShape), "");
 
         // 全流程任何一步都不该出现「余额不足」这类错误码
         List<String> resourceCodes = new ArrayList<>();
@@ -379,6 +689,17 @@ public final class BuildSelfTest {
             }
         }
         check("错误码表里没有余额/交易类错误", resourceCodes.isEmpty(), resourceCodes.toString());
+
+        // 没有任何资源字段：换批次数是计数器而不是货币
+        List<String> resourceFields = new ArrayList<>();
+        for (var f : BuildSession.class.getDeclaredFields()) {
+            String n = f.getName().toLowerCase();
+            if (n.contains("point") || n.contains("budget") || n.contains("cost")
+                    || n.contains("orb") || n.contains("material")) {
+                resourceFields.add(f.getName());
+            }
+        }
+        check("BuildSession 没有点数/预算/材料字段", resourceFields.isEmpty(), resourceFields.toString());
 
         // 重复确认不会产出第二件
         BuildSession s = startEffect(BaseKind.EQUIPMENT, 5L);
@@ -428,26 +749,26 @@ public final class BuildSelfTest {
         section("配置校验");
 
         check("形态候选 < 3 被拒", throwsBadConfig(() -> new BuildConfig(
-                2, 5, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15)), "");
+                2, 5, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1)), "");
         check("形态候选 > 9 被拒", throwsBadConfig(() -> new BuildConfig(
-                10, 5, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15)), "");
+                10, 5, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1)), "");
         check("修饰候选 < 3 被拒", throwsBadConfig(() -> new BuildConfig(
-                5, 2, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15)), "");
+                5, 2, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1)), "");
         check("修饰选取数 0 被拒", throwsBadConfig(() -> new BuildConfig(
-                5, 5, 0, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15)), "");
+                5, 5, 0, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1)), "");
         check("修饰选取数 > 候选数被拒", throwsBadConfig(() -> new BuildConfig(
-                5, 5, 6, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15)), "");
+                5, 5, 6, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1)), "");
         check("效果选取数 > 候选数被拒", throwsBadConfig(() -> new BuildConfig(
-                5, 5, 1, 5, 6, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15)), "");
+                5, 5, 1, 5, 6, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1)), "");
         check("稀有度阈值不递增被拒", throwsBadConfig(() -> new BuildConfig(
-                5, 5, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 5.0, 2.8, 1.6, 0.15)), "");
+                5, 5, 1, 5, 1, null, Tier.WHITE, Tier.WHITE, Tier.WHITE, 5.0, 2.8, 1.6, 0.15, 1)), "");
         check("全零权重被拒", throwsBadConfig(() -> new BuildConfig(
                 5, 5, 1, 5, 1, Map.of(Tier.WHITE, 0, Tier.BLUE, 0, Tier.GOLD, 0, Tier.RED, 0),
-                Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15)), "");
+                Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1)), "");
 
         // 可配置性实证：三层候选都发 3，修饰选 2，效果选 2
         BuildConfig small = new BuildConfig(3, 3, 2, 3, 2, null,
-                Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15);
+                Tier.WHITE, Tier.WHITE, Tier.WHITE, 1.6, 2.8, 4.5, 0.15, 1);
         BuildSession s = new BuildSession(table, small, 13L);
         s.choose(0);
         s.confirm();
@@ -544,28 +865,11 @@ public final class BuildSelfTest {
     private static void simulate(int roundsPerKind) {
         section("压力模拟 " + (roundsPerKind * BaseKind.values().length) + " 局");
 
-        Stats stats = new Stats();
-        int failures = 0;
-        List<String> errors = new ArrayList<>();
-
-        for (BaseKind kind : BaseKind.values()) {
-            for (int i = 0; i < roundsPerKind; i++) {
-                long seed = 1000L * (kind.ordinal() + 1) + i;
-                try {
-                    Composition c = playOne(kind, seed, stats);
-                    stats.record(c);
-                } catch (RuntimeException e) {
-                    failures++;
-                    if (errors.size() < 5) {
-                        errors.add(kind.zh() + " seed=" + seed + " → " + e);
-                    }
-                }
-            }
-        }
+        Stats stats = simulateConfig(config, roundsPerKind);
 
         int total = roundsPerKind * BaseKind.values().length;
-        check("全部 " + total + " 局无异常", failures == 0,
-                failures + " 局失败：" + String.join("; ", errors));
+        check("全部 " + total + " 局无异常", stats.failures == 0,
+                stats.failures + " 局失败：" + String.join("; ", stats.errors));
         check("形态层每局都发满 5 张", stats.minShape == 5 && stats.maxShape == 5,
                 "范围 " + stats.minShape + "~" + stats.maxShape);
         check("修饰层每局都发满 5 张", stats.minModifier == 5 && stats.maxModifier == 5,
@@ -595,11 +899,61 @@ public final class BuildSelfTest {
         check("四档稀有度都有产出", stats.distinctRarities() == 4, stats.rarityLine());
     }
 
+    // ================================================================ 双选 vs 单选的分布漂移
+
+    /**
+     * 用同一套 seed（900 局）分别跑 {@code modifierPickCount=1} 与 {@code =2}，量出稀有度漂移。
+     *
+     * <p>为什么必须量而不是「大致合理」：双选让平均点数的分母从 3 变成 4，
+     * 而阈值 1.6/2.8/4.5 是固定值。<b>分母变大 → 均值的方差变小 → 分布向中心聚集</b>，
+     * 这不是 bug，但它决定了两个配置能不能共用同一套阈值。这里测的就是「能不能」。
+     */
+    private static void rarityDrift() {
+        section("修饰单选 / 双选 各 900 局的稀有度漂移");
+
+        Stats one = simulateConfig(BuildConfig.defaults(), 300);
+        Stats two = simulateConfig(BuildConfig.defaults().withModifierPickCount(2), 300);
+
+        check("单选 900 局无异常", one.failures == 0, one.failures + " 局失败：" + one.errors);
+        check("双选 900 局无异常", two.failures == 0, two.failures + " 局失败：" + two.errors);
+        check("单选 900 局卡数恒为 3", one.minCards == 3 && one.maxCards == 3,
+                one.minCards + "~" + one.maxCards);
+        check("双选 900 局卡数恒为 4", two.minCards == 4 && two.maxCards == 4,
+                two.minCards + "~" + two.maxCards);
+        check("双选 900 局四档稀有度都有产出", two.distinctRarities() == 4, two.rarityLine());
+        check("双选 900 局没有出现同族两张", two.sameFamilyDupes == 0, two.sameFamilyDupes + " 局");
+        check("单选 900 局没有出现同族两张", one.sameFamilyDupes == 0, one.sameFamilyDupes + " 局");
+        check("双选 900 局孵化倍率下限正好高 0.15（多一张卡的额外百分比）",
+                Math.abs(two.minHatch - (one.minHatch + 0.15)) < 1e-9,
+                String.format("%.2f vs %.2f + 0.15", two.minHatch, one.minHatch));
+        check("双选 900 局平均孵化倍率高于单选", two.avgHatch() > one.avgHatch(),
+                String.format("%.2f vs %.2f", two.avgHatch(), one.avgHatch()));
+
+        report("单选 pick=1 分布", one.rarityLine());
+        report("双选 pick=2 分布", two.rarityLine());
+        StringBuilder drift = new StringBuilder();
+        for (Rarity r : Rarity.values()) {
+            drift.append(r.zh()).append(' ').append(signed(one.pct(r))).append(" → ")
+                    .append(signed(two.pct(r))).append(" 点  ");
+        }
+        report("漂移（pick=1 → pick=2，百分点）", drift.toString().trim());
+        report("平均点数", String.format("%.2f → %.2f", one.avgPoints(), two.avgPoints()));
+        report("孵化倍率均值", String.format("%.2f → %.2f", one.avgHatch(), two.avgHatch()));
+    }
+
+    private static String signed(double v) {
+        return String.format("%+.1f", v);
+    }
+
     // ================================================================ 玩法辅助
 
     /** 从类型层走到形态层。 */
     private static BuildSession startShape(BaseKind kind, long seed) {
-        BuildSession s = new BuildSession(table, config, seed);
+        return startShape(config, kind, seed);
+    }
+
+    private static BuildSession startShape(BuildConfig cfg, BaseKind kind, long seed) {
+        BuildSession s = new BuildSession(table, cfg, seed);
         s.chooseType(kind);
         s.confirm();
         return s;
@@ -608,6 +962,13 @@ public final class BuildSelfTest {
     /** 从类型层走到修饰层（形态选第 0 张）。 */
     private static BuildSession startModifier(BaseKind kind, long seed) {
         BuildSession s = startShape(kind, seed);
+        s.choose(0);
+        s.confirm();
+        return s;
+    }
+
+    private static BuildSession startModifier(BuildConfig cfg, BaseKind kind, long seed) {
+        BuildSession s = startShape(cfg, kind, seed);
         s.choose(0);
         s.confirm();
         return s;
@@ -634,10 +995,30 @@ public final class BuildSelfTest {
                 .orElseThrow(() -> new IllegalStateException("未产出组合"));
     }
 
+    /** 固定策略 + 可配置选取数：每层按配置的选取数依次点前 k 张。 */
     private static Composition playFixed(BuildConfig cfg, BaseKind kind, long seed) {
         BuildSession s = new BuildSession(table, cfg, seed);
         s.chooseType(kind);
         s.confirm();
+        s.choose(0);
+        s.confirm();
+        for (int k = 0; k < cfg.modifierPickCount(); k++) {
+            s.choose(k);
+        }
+        s.confirm();
+        for (int k = 0; k < cfg.effectPickCount(); k++) {
+            s.choose(k);
+        }
+        return s.confirm().orElseThrow(() -> new IllegalStateException("未产出组合"));
+    }
+
+    /** 形态层先换一批，再按固定策略走完全程。 */
+    private static Composition playWithReroll(BaseKind kind, long seed) {
+        BuildConfig cfg = BuildConfig.defaults().withShapeRerolls(1);
+        BuildSession s = new BuildSession(table, cfg, seed);
+        s.chooseType(kind);
+        s.confirm();
+        s.rerollShape();
         s.choose(0);
         s.confirm();
         s.choose(0);
@@ -646,9 +1027,37 @@ public final class BuildSelfTest {
         return s.confirm().orElseThrow(() -> new IllegalStateException("未产出组合"));
     }
 
+    /** 按 seed 决定换 0~3 批，然后走完全程。 */
+    private static Composition playOneRandomReroll(long seed) {
+        BuildConfig cfg = BuildConfig.defaults().withShapeRerolls(3);
+        BuildSession s = new BuildSession(table, cfg, seed);
+        s.chooseType(BaseKind.values()[Math.floorMod((int) seed, BaseKind.values().length)]);
+        s.confirm();
+        int rerolls = (int) Math.floorMod(seed, 4L);
+        for (int i = 0; i < rerolls; i++) {
+            s.rerollShape();
+        }
+        s.choose(Math.floorMod(seed, s.cards().size()));
+        s.confirm();
+        s.choose(Math.floorMod(seed / 7L, s.cards().size()));
+        s.confirm();
+        s.choose(Math.floorMod(seed / 11L, s.cards().size()));
+        return s.confirm().orElseThrow(() -> new IllegalStateException("未产出组合"));
+    }
+
+    /** 换批失败（次数用尽）后，玩家仍然能正常选牌走完全程。 */
+    private static boolean proceedAfterRerollFailure(BuildSession s) {
+        s.choose(0);
+        s.confirm();
+        s.choose(0);
+        s.confirm();
+        s.choose(0);
+        return s.confirm().isPresent() && s.phase() == BuildPhase.FINISHED;
+    }
+
     /** 按 seed 变化选择索引，模拟不同玩家的偏好。 */
-    private static Composition playOne(BaseKind kind, long seed, Stats stats) {
-        BuildSession s = new BuildSession(table, config, seed);
+    private static Composition playOne(BuildConfig cfg, BaseKind kind, long seed, Stats stats) {
+        BuildSession s = new BuildSession(table, cfg, seed);
         TypeOption opt = s.typeOptions().get(BuildSession.indexOfType(kind));
         if (!opt.available()) {
             throw new IllegalStateException("类型不可用：" + kind.zh());
@@ -669,7 +1078,9 @@ public final class BuildSelfTest {
         if (mods.isEmpty()) {
             throw new IllegalStateException("修饰候选为空");
         }
-        s.choose(Math.floorMod(seed / 7L, mods.size()));
+        for (int k = 0; k < cfg.modifierPickCount(); k++) {
+            s.choose(Math.floorMod(seed / 7L + k, mods.size()));
+        }
         s.confirm();
 
         List<DraftCard> effects = s.cards();
@@ -677,8 +1088,26 @@ public final class BuildSelfTest {
         if (effects.isEmpty()) {
             throw new IllegalStateException("效果候选为空");
         }
-        s.choose(Math.floorMod(seed / 11L, effects.size()));
+        for (int k = 0; k < cfg.effectPickCount(); k++) {
+            s.choose(Math.floorMod(seed / 11L + k, effects.size()));
+        }
         return s.confirm().orElseThrow(() -> new IllegalStateException("未产出组合"));
+    }
+
+    /** 用一套配置跑满 3 类 × roundsPerKind 局，返回统计。 */
+    private static Stats simulateConfig(BuildConfig cfg, int roundsPerKind) {
+        Stats stats = new Stats();
+        for (BaseKind kind : BaseKind.values()) {
+            for (int i = 0; i < roundsPerKind; i++) {
+                long seed = 1000L * (kind.ordinal() + 1) + i;
+                try {
+                    stats.record(playOne(cfg, kind, seed, stats));
+                } catch (RuntimeException e) {
+                    stats.fail(kind, seed, e);
+                }
+            }
+        }
+        return stats;
     }
 
     /** 统计容器。 */
@@ -693,11 +1122,24 @@ public final class BuildSelfTest {
         long modifierSum;
         long effectSum;
         int rounds;
+        int minCards = Integer.MAX_VALUE;
+        int maxCards = Integer.MIN_VALUE;
         long cardsSum;
         long pointsSum;
         double minHatch = Double.MAX_VALUE;
         double maxHatch = -Double.MAX_VALUE;
+        double hatchSum;
+        int sameFamilyDupes;
+        int failures;
+        final List<String> errors = new ArrayList<>();
         final Map<Rarity, Integer> rarity = new EnumMap<>(Rarity.class);
+
+        void fail(BaseKind kind, long seed, RuntimeException e) {
+            failures++;
+            if (errors.size() < 5) {
+                errors.add(kind.zh() + " seed=" + seed + " → " + e);
+            }
+        }
 
         void recordShape(int n) {
             minShape = Math.min(minShape, n);
@@ -719,11 +1161,21 @@ public final class BuildSelfTest {
 
         void record(Composition c) {
             rounds++;
+            minCards = Math.min(minCards, c.size());
+            maxCards = Math.max(maxCards, c.size());
             cardsSum += c.size();
             pointsSum += c.totalPoints();
+            hatchSum += c.hatchMultiplier();
             minHatch = Math.min(minHatch, c.hatchMultiplier());
             maxHatch = Math.max(maxHatch, c.hatchMultiplier());
+            if (c.modifiers().stream().map(DraftCard::family).distinct().count() != c.modifiers().size()) {
+                sameFamilyDupes++;
+            }
             rarity.merge(c.rarity(), 1, Integer::sum);
+        }
+
+        double avgHatch() {
+            return rounds == 0 ? 0 : hatchSum / rounds;
         }
 
         double avg(long sum) {
@@ -772,6 +1224,76 @@ public final class BuildSelfTest {
             }
         }
         return fams.size();
+    }
+
+    /** 卡牌的词条 id 序列（顺序保留，用于验证「这一批」的身份）。 */
+    private static List<String> idsOf(List<DraftCard> cards) {
+        List<String> out = new ArrayList<>(cards.size());
+        for (DraftCard c : cards) {
+            out.add(c.affix().id());
+        }
+        return out;
+    }
+
+    private static boolean disjoint(List<String> a, List<String> b) {
+        for (String x : a) {
+            if (b.contains(x)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int distinctStrings(List<String> ids) {
+        return new LinkedHashSet<>(ids).size();
+    }
+
+    private static List<Tier> qualityOf(List<DraftCard> cards) {
+        List<Tier> out = new ArrayList<>(cards.size());
+        for (DraftCard c : cards) {
+            out.add(c.tier().tier());
+        }
+        return out;
+    }
+
+    /**
+     * 独立复算孵化倍率，不抄 {@code BuildSession} 的公式实现。
+     *
+     * <p>口径：1.0 + 所有「延时」类代价 + 每多一张卡的额外百分比。
+     * 写成独立算式而不是调被测代码，才能真正验证「换批 / 双选没有改变口径」。
+     */
+    private static double expectedHatch(Composition c, BuildConfig cfg) {
+        double m = 1.0;
+        for (DraftCard card : c.cards()) {
+            TierData.Drawback d = card.tier().drawback();
+            if (d != null && d.isHatchTime()) {
+                m += d.value();
+            }
+        }
+        return m + cfg.extraCardHatchPct() * (c.size() - 1);
+    }
+
+    /** 从属性层里找两张同族的卡，用来验证「同族两张」的判据。 */
+    private static List<DraftCard> twoCardsOfSameFamily() {
+        Map<String, List<DraftCard>> byFamily = new java.util.LinkedHashMap<>();
+        for (Layer layer : List.of(Layer.ELEMENT, Layer.ATTRIBUTE)) {
+            for (var a : table.layer(layer)) {
+                TierData data = a.tierData(Tier.WHITE);
+                if (data == null) {
+                    continue;
+                }
+                List<DraftCard> list = byFamily.computeIfAbsent(a.family(), k -> new ArrayList<>());
+                if (list.size() < 2) {
+                    list.add(new DraftCard(a, data));
+                }
+            }
+        }
+        for (List<DraftCard> list : byFamily.values()) {
+            if (list.size() == 2) {
+                return List.copyOf(list);
+            }
+        }
+        throw new IllegalStateException("卡表里找不到同族的两张修饰卡");
     }
 
     private static boolean sameIds(List<DraftCard> a, List<DraftCard> b) {

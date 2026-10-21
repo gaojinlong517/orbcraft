@@ -27,6 +27,10 @@ import java.util.Map;
  * 强度控制因此从「你投入多少点数」转成「你抽到多好的品质」，
  * 也就是需求里那条「非交易型随机构筑」。
  *
+ * <p><b>{@code shapeRerolls} 不是资源，是「重看待选」的次数上限。</b>
+ * 它不花点数、不花材料、不占用抽取机会，只是把形态层这一批候选作废重发。
+ * 之所以仍然要设上限，见 {@link #MAX_SHAPE_REROLLS}。
+ *
  * @param shapeDealCount     形态层候选张数（默认 5）
  * @param modifierDealCount  修饰层候选张数（默认 5）
  * @param modifierPickCount  修饰层必须选取张数（默认 1）
@@ -40,6 +44,7 @@ import java.util.Map;
  * @param rareAvgMax         平均点数不超过它 → 稀有
  * @param epicAvgMax         平均点数不超过它 → 史诗，超过即传说
  * @param extraCardHatchPct  每多带 1 张卡，孵化时长额外增加的百分比（默认 0.15）
+ * @param shapeRerolls       形态层「换一批」可用次数（默认 1，0 表示关掉换批）
  */
 public record BuildConfig(
         int shapeDealCount,
@@ -54,12 +59,25 @@ public record BuildConfig(
         double commonAvgMax,
         double rareAvgMax,
         double epicAvgMax,
-        double extraCardHatchPct
+        double extraCardHatchPct,
+        int shapeRerolls
 ) {
 
     /** 判断候选张数的合理区间：少于 3 张不构成选择，多于 9 张界面放不下。 */
     public static final int MIN_DEAL = 3;
     public static final int MAX_DEAL = 9;
+
+    /**
+     * 「换一批」次数的区间。
+     *
+     * <p>上限 3 而不是可无限配：换批的存在是为了救「抽到的载体不适合这一局」，
+     * 不是为了让玩家把 12 个载体按喜好刷成想要的模型。次数一多，
+     * 12 个载体里挑 5 张的随机性会被「反复换到满意为止」抹平 ——
+     * 那正是当初删掉公开 {@code deal()} 想要避免的事。
+     * 0 是合法值，表示这套玩法关掉换批（例如高难模式）。
+     */
+    public static final int MIN_SHAPE_REROLLS = 0;
+    public static final int MAX_SHAPE_REROLLS = 3;
 
     /**
      * 形态层固定只选 1 张 —— <b>不是懒得做成可配，是语义上不能多选。</b>
@@ -92,6 +110,10 @@ public record BuildConfig(
         if (extraCardHatchPct < 0 || extraCardHatchPct > 2) {
             throw new BuildException(BuildException.Code.BAD_CONFIG,
                     "extraCardHatchPct 应在 0~2 之间：" + extraCardHatchPct);
+        }
+        if (shapeRerolls < MIN_SHAPE_REROLLS || shapeRerolls > MAX_SHAPE_REROLLS) {
+            throw new BuildException(BuildException.Code.BAD_CONFIG,
+                    "shapeRerolls 应在 " + MIN_SHAPE_REROLLS + "~" + MAX_SHAPE_REROLLS + " 之间：" + shapeRerolls);
         }
 
         qualityWeights = qualityWeights == null
@@ -145,7 +167,8 @@ public record BuildConfig(
                 Map.of(Tier.WHITE, 38, Tier.BLUE, 32, Tier.GOLD, 22, Tier.RED, 8),
                 Tier.WHITE, Tier.WHITE, Tier.WHITE,
                 1.6, 2.8, 4.5,
-                0.15
+                0.15,
+                1
         );
     }
 
@@ -188,24 +211,31 @@ public record BuildConfig(
     public BuildConfig withModifierPickCount(int newPick) {
         return new BuildConfig(shapeDealCount, modifierDealCount, newPick, effectDealCount, effectPickCount,
                 qualityWeights, shapeFloor, modifierFloor, effectFloor,
-                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct, shapeRerolls);
     }
 
     public BuildConfig withEffectPickCount(int newPick) {
         return new BuildConfig(shapeDealCount, modifierDealCount, modifierPickCount, effectDealCount, newPick,
                 qualityWeights, shapeFloor, modifierFloor, effectFloor,
-                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct, shapeRerolls);
     }
 
     public BuildConfig withDealCounts(int shape, int modifier, int effect) {
         return new BuildConfig(shape, modifier, modifierPickCount, effect, effectPickCount,
                 qualityWeights, shapeFloor, modifierFloor, effectFloor,
-                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct, shapeRerolls);
     }
 
     public BuildConfig withFloors(Tier shape, Tier modifier, Tier effect) {
         return new BuildConfig(shapeDealCount, modifierDealCount, modifierPickCount, effectDealCount, effectPickCount,
                 qualityWeights, shape, modifier, effect,
-                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct, shapeRerolls);
+    }
+
+    /** 只改换批次数，其余不变。0 = 关掉换批。 */
+    public BuildConfig withShapeRerolls(int newRerolls) {
+        return new BuildConfig(shapeDealCount, modifierDealCount, modifierPickCount, effectDealCount, effectPickCount,
+                qualityWeights, shapeFloor, modifierFloor, effectFloor,
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct, newRerolls);
     }
 }

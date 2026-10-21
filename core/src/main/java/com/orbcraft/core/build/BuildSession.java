@@ -13,9 +13,11 @@ import com.orbcraft.core.spec.Rarity;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -55,8 +57,13 @@ import java.util.Set;
  * 所以 {@code dealModifier()} 只在 {@code commitShape()} 之后调用，
  * 过滤用的是<b>已确认</b>的载体 id。混层发牌会让玩家拿到一半不适用的修饰牌。
  *
- * <p><b>⑤ 没有任何资源字段。</b> 没有 points、没有 budget、没有 reroll 消耗。
+ * <p><b>⑤ 没有任何资源字段。</b> 没有 points、没有 budget、没有可交易物的扣减。
  * 玩家能选什么只取决于抽到了什么。想变强只能多抽，不能多花。
+ * 唯一的计数器是 {@code shapeRerollsLeft}，它数的是「还能重看几次形态候选」，
+ * 不是点数也不是材料；用尽后没有替代获取途径，只会抛 {@code REROLL_EXHAUSTED}。
+ *
+ * <p><b>⑥ 换批不换难度，只换候选。</b> 换批只重发形态层，不动品质权重、
+ * 不动修饰/效果池容量。它解决的是「这一批载体不合手」，不是「刷到高品质为止」。
  *
  * <p>本类不是线程安全的，一个 session 只属于一个玩家的一次构筑。
  */
@@ -79,6 +86,33 @@ public final class BuildSession {
      * {@code typeOptions()} 会被 UI 每帧调用，不能每次都遍历 1124 条。
      */
     private final EnumMap<BaseKind, Pool> pools = new EnumMap<>(BaseKind.class);
+
+    /** 形态层「换一批」剩余次数。构造期取配置值，只减不增。 */
+    private int shapeRerollsLeft;
+
+    /**
+     * 本次构筑里<b>已经发给过玩家的</b>载体 id，累计。
+     *
+     * <p>换批时用它做排除集。关键是「累计」而不是「当前这一批」：
+     * 只排当前批的话，换第一次看不到的载体，换第二次又会被发回来 ——
+     * 玩家看到第一张和第三张是同一个东西，会直接判定「换一批坏了」。
+     */
+    private final Set<String> seenCarriers = new LinkedHashSet<>();
+
+    /**
+     * 每个载体<b>最后一次出现</b>的批次序号，用于回收时按「最久未出现」排序。
+     *
+     * <p>载体总数（12/13/10）并不总是 5 的整数倍，换到第三批时必然要回收旧载体。
+     * 回收顺序若按卡表顺序，每局都会先发同一批老面孔；按 LRU 排，
+     * 三批之内玩家看到的载体数量最大化，且回收的永远是「最久没见过的那几个」。
+     */
+    private final Map<String, Integer> carrierLastSeen = new HashMap<>();
+
+    /** 已经发过几批形态候选（含首批）。 */
+    private int shapeBatch;
+
+    /** 刚作废的那一批的载体 id —— 用来保证新批不会和它一模一样。 */
+    private List<String> lastShapeBatch = List.of();
 
     private BuildPhase phase = BuildPhase.TYPE_CHOOSING;
     private BaseKind kind;
@@ -104,6 +138,7 @@ public final class BuildSession {
         this.table = Objects.requireNonNull(table, "table");
         this.config = config == null ? BuildConfig.defaults() : config;
         this.rng = new SeedRandom(seed);
+        this.shapeRerollsLeft = this.config.shapeRerolls();
         this.weights = new int[Tier.values().length];
         for (Tier t : Tier.values()) {
             weights[t.rank()] = this.config.weightOf(t);
@@ -433,12 +468,50 @@ public final class BuildSession {
                     "修饰层需要选 " + config.modifierPickCount() + " 张，当前选了 "
                             + modifierChosen.size() + " 张");
         }
+        List<DraftCard> picked = new ArrayList<>(modifierChosen.size());
         for (int i : modifierChosen) {
-            DraftCard card = modifierCards.get(i);
+            picked.add(modifierCards.get(i));
+        }
+        requireDistinctFamilies(picked);
+        for (DraftCard card : picked) {
             modifierPicked.add(card);
             usedFamilies.add(card.family());
         }
         modifierChosen.clear();
+    }
+
+    /**
+     * 拒绝同一族的两张卡。
+     *
+     * <p>候选本来就是族去重后发出的，所以这条校验正常走不到 —— 但它是<b>结构性的底线</b>：
+     * 一旦将来放开候选去重、或两层发牌被合进同一批，同族两张就会让 settle
+     * 把同一项强化叠加两遍，产物数值直接翻倍。这种错误比「拒绝一次非法选择」危险得多。
+     */
+    static void requireDistinctFamilies(List<DraftCard> cards) {
+        if (distinctFamilyCount(cards) != cards.size()) {
+            throw new BuildException(BuildException.Code.FAMILY_CONFLICT,
+                    "修饰层不能选同一族的卡：" + familiesOf(cards));
+        }
+    }
+
+    /** 一组卡里有几个不同的族。包内可见，自测直接用它验证「同族两张」的判据。 */
+    static int distinctFamilyCount(List<DraftCard> cards) {
+        Set<String> families = new HashSet<>();
+        for (DraftCard c : cards) {
+            families.add(c.family());
+        }
+        return families.size();
+    }
+
+    private static String familiesOf(List<DraftCard> cards) {
+        StringBuilder sb = new StringBuilder();
+        for (DraftCard c : cards) {
+            if (sb.length() > 0) {
+                sb.append(" / ");
+            }
+            sb.append(c.family());
+        }
+        return sb.toString();
     }
 
     private void commitEffect() {
@@ -474,14 +547,138 @@ public final class BuildSession {
      * 拆层后这个问题在结构上不存在：修饰池只在形态确认后才被过滤。
      */
     private void dealShape() {
-        List<Affix> pool = pool(Layer.CARRIER, null, null);
-        if (pool.size() < config.shapePickCount()) {
+        List<Affix> candidates = pool(Layer.CARRIER, null, null);
+        if (candidates.size() < config.shapePickCount()) {
             throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
-                    "「" + kind.zh() + "」可用形态只有 " + pool.size()
+                    "「" + kind.zh() + "」可用形态只有 " + candidates.size()
                             + " 个，本层需要 " + config.shapePickCount() + " 个");
         }
-        shuffle(pool);
-        shapeCards = List.copyOf(toCards(takeDistinct(pool, config.shapeDealCount()), config.shapeFloor()));
+        shapeCards = List.copyOf(drawShapeBatch(candidates, false));
+        recordShapeBatch();
+    }
+
+    /**
+     * 形态层「换一批」。
+     *
+     * <p>只在 {@code SHAPE_CHOOSING}（未选任何形态）时可用。已选状态下不让换，
+     * 是因为换批会清空已选 —— 与其让玩家「选中 → 换批 → 选择无声消失」，
+     * 不如要求先取消再换，让消失这件事由玩家自己发起。
+     *
+     * <p><b>不消耗任何额度、不扣点数、不扣材料。</b> 构筑阶段本来就没有预算概念，
+     * 换批只消耗 {@code shapeRerolls} 次数。次数用尽后抛 {@code REROLL_EXHAUSTED}，
+     * 不会退化成「无限换」。
+     *
+     * @throws BuildException {@code WRONG_PHASE} 不在形态层选择态；
+     *                        {@code REROLL_EXHAUSTED} 次数已用尽；
+     *                        {@code POOL_TOO_SMALL} 载体池不足以换出不同的新一批
+     */
+    public void rerollShape() {
+        requireBuilding("换一批");
+        if (phase != BuildPhase.SHAPE_CHOOSING) {
+            throw new BuildException(BuildException.Code.WRONG_PHASE,
+                    "只有形态层未选择时才能换一批；当前阶段 " + phase + "（已选的卡请先取消选择）");
+        }
+        if (shapeRerollsLeft <= 0) {
+            throw new BuildException(BuildException.Code.REROLL_EXHAUSTED,
+                    "形态层换批次数已用尽（配置 " + config.shapeRerolls() + " 次）");
+        }
+        List<Affix> candidates = pool(Layer.CARRIER, null, null);
+        List<DraftCard> next = drawShapeBatch(candidates, true);
+        shapeRerollsLeft--;
+        shapeChosen.clear();
+        shapeCards = List.copyOf(next);
+        recordShapeBatch();
+        phase = BuildPhase.SHAPE_CHOOSING;
+    }
+
+    /** 形态层还剩几次换批。UI 用它决定按钮是否可点。 */
+    public int shapeRerollsLeft() {
+        return shapeRerollsLeft;
+    }
+
+    /**
+     * 抽一批形态候选。
+     *
+     * @param excludeSeen 是否排除本构筑已经发过的载体（首批为 {@code false}）
+     */
+    private List<DraftCard> drawShapeBatch(List<Affix> candidates, boolean excludeSeen) {
+        List<Affix> fresh = new ArrayList<>(candidates.size());
+        List<Affix> recycled = new ArrayList<>();
+        for (Affix a : candidates) {
+            if (excludeSeen && seenCarriers.contains(a.carrierId())) {
+                recycled.add(a);
+            } else {
+                fresh.add(a);
+            }
+        }
+        shuffle(fresh);
+        if (!recycled.isEmpty()) {
+            // 先打乱再按「上次出现批次」稳定排序：同批次内的相对顺序仍然是随机的，
+            // 但整体上越久没出现的载体越靠前。回收顺序因此不是卡表顺序。
+            shuffle(recycled);
+            recycled.sort(Comparator.comparingInt(a -> carrierLastSeen.getOrDefault(a.carrierId(), 0)));
+        }
+        List<Affix> ordered = new ArrayList<>(fresh.size() + recycled.size());
+        ordered.addAll(fresh);
+        ordered.addAll(recycled);
+
+        int want = config.shapeDealCount();
+        List<DraftCard> cards = toCards(takeDistinct(ordered, want), config.shapeFloor());
+        if (cards.size() < want) {
+            throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
+                    "「" + kind.zh() + "」能发出去的载体只有 " + cards.size()
+                            + " 张，不足本层候选数 " + want + " 张");
+        }
+        if (excludeSeen) {
+            ensureNotSameAsLastBatch(cards, candidates);
+        }
+        return cards;
+    }
+
+    /**
+     * 保证换出来的新一批与刚作废的那批<b>不完全相同</b>。
+     *
+     * <p>正常情况下这条恒成立：排除集包含刚作废的那一批，新批根本抽不到它们。
+     * 只有当可用载体被排除得只剩不足一批、必然回收时才有可能撞上 ——
+     * 而「换了一批，还是这五张」正是玩家判断功能失效的直接依据，所以这里再兜一次底：
+     * 若真的整批重合，用一个上一批没出现过的载体替换掉最后一张。
+     */
+    private void ensureNotSameAsLastBatch(List<DraftCard> cards, List<Affix> candidates) {
+        Set<String> ids = new LinkedHashSet<>();
+        Set<String> families = new HashSet<>();
+        for (DraftCard c : cards) {
+            ids.add(c.affix().carrierId());
+            families.add(c.family());
+        }
+        if (!ids.equals(new LinkedHashSet<>(lastShapeBatch))) {
+            return;
+        }
+        for (Affix a : candidates) {
+            String id = a.carrierId();
+            if (id != null && !lastShapeBatch.contains(id) && !families.contains(a.family())) {
+                cards.set(cards.size() - 1, new DraftCard(a, rollTier(a, config.shapeFloor())));
+                return;
+            }
+        }
+        throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
+                "「" + kind.zh() + "」的载体池只有 " + candidates.size() + " 个，换不出与上一批不同的 "
+                        + config.shapeDealCount() + " 张");
+    }
+
+    /** 记下这一批：累计出现集 + 每个载体的最后出现批次。首批与每次换批都走这里。 */
+    private void recordShapeBatch() {
+        shapeBatch++;
+        List<String> ids = new ArrayList<>(shapeCards.size());
+        for (DraftCard c : shapeCards) {
+            String id = c.affix().carrierId();
+            if (id == null) {
+                continue;
+            }
+            ids.add(id);
+            seenCarriers.add(id);
+            carrierLastSeen.put(id, shapeBatch);
+        }
+        lastShapeBatch = List.copyOf(ids);
     }
 
     /**
@@ -679,6 +876,7 @@ public final class BuildSession {
                 config.shapePickCount(),
                 config.modifierPickCount(),
                 config.effectPickCount(),
+                shapeRerollsLeft,
                 canConfirm(),
                 confirmHint(),
                 confirmedCards(),
