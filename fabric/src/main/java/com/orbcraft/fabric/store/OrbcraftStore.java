@@ -27,6 +27,7 @@ import com.orbcraft.core.target.TargetException;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.PlayerStore;
 import com.orbcraft.fabric.contract.Services;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -44,10 +45,11 @@ import net.minecraft.world.level.storage.LevelResource;
  * {@link PlayerStore} 契约。登录时把断面灌回 {@link IncubationService} 与
  * {@link TargetAllowance}，退出/定时/关键变更时把断面写回磁盘。
  *
- * <p><b>本类同时是 {@link IncubationService} 实例的持有者。</b> 恢复与推进必须落在
- * <b>同一个实例</b>上：S4 的 {@code restore} 写进 A 实例、S5 的 {@code tick} 推 B 实例，
- * 结果就是「登录提示恢复了 3 张票，但永远不涨进度」。全项目只允许通过
- * {@link #hatch()} 取这个实例（S2 的 preview/submit 也一样）。
+ * <p><b>孵化服务与定向账本的实例不在本类。</b> 它们由主线的 {@link OrbcraftRuntime} 持有，
+ * 这里只做「往那一份状态里 restore / 从那一份状态里取断面」。本类<b>不 new</b>
+ * {@link IncubationService}：恢复（这里）与推进（S5 的 tick）必须落在同一个实例上，
+ * 两个实例的症状是「登录提示恢复了 3 张票，但进度永远不涨」，而且不报错。
+ * {@link #hatch()} 只是为了不改四路已有的调用点，方法体直接转给 runtime。
  *
  * <p><b>三个必须守住的恢复语义</b>（写错会静默改玩法，都是 core 侧实现的）：
  * <ol>
@@ -71,10 +73,7 @@ public final class OrbcraftStore implements PlayerStore {
     /** 定时落盘间隔。5 分钟远小于一次崩溃可能丢的进度，也远大于一次写盘的开销。 */
     public static final int SAVE_INTERVAL_TICKS = 20 * 60 * 5;
 
-    /** 每类定向卡每日额度。与 {@code TargetAllowance.daily} 的默认值一致。 */
-    public static final int TARGETS_PER_KIND = 1;
-
-    /** 定向账本保留天数。 */
+    /** 定向账本保留天数。每类每日额度不在这里 —— 那是 {@code OrbcraftRuntime} 的数值。 */
     public static final int TARGETS_RETENTION_DAYS = TargetAllowance.DEFAULT_RETENTION_DAYS;
 
     /** 存档子目录，相对世界根目录。 */
@@ -82,9 +81,6 @@ public final class OrbcraftStore implements PlayerStore {
 
     private static final OrbcraftStore INSTANCE = new OrbcraftStore();
     private static final TicketCodec CODEC = new TicketCodec();
-
-    /** 全项目唯一的孵化服务实例。进程内换存档（SERVER_STARTED）时会被换掉。 */
-    private volatile IncubationService hatch = new IncubationService();
 
     private final Map<String, Session> sessions = new HashMap<>();
     private final Set<String> hatchRestored = new LinkedHashSet<>();
@@ -175,8 +171,10 @@ public final class OrbcraftStore implements PlayerStore {
         synchronized (this) {
             sessions.clear();
             hatchRestored.clear();
-            // 同一 JVM 里换存档（单人退出再进另一个世界）时，上一局的票据绝不能带过来。
-            hatch = new IncubationService();
+            // 注意：孵化服务是 main 的 OrbcraftRuntime 持有的单例，本类无权也没有办法清空它。
+            // 同一 JVM 里换存档（单人退出再进另一个世界）时，上一局的票据会留在那份单例里，
+            // 这时 restore 会撞「票据 id 重复」并被下面的 catch 记为错误 —— 这是 runtime 的
+            // 生命周期决定，不在这里绕（绕过等于自己造第二份状态）。
             lastSaveServerTick = srv.getTickCount();
         }
         OrbcraftMod.LOG.info("[orbcraft] 玩家存档目录 {}（定时保存每 {} tick）", dir, SAVE_INTERVAL_TICKS);
@@ -197,7 +195,7 @@ public final class OrbcraftStore implements PlayerStore {
     }
 
     private void onJoin(ServerPlayer player, MinecraftServer srv) {
-        enter(PlayerStore.ownerKeyOf(player.getUUID()), nowTick(srv));
+        enter(PlayerStore.ownerKeyOf(player.getUUID()), OrbcraftRuntime.nowTick(srv));
     }
 
     private void onDisconnect(ServerPlayer player) {
@@ -206,7 +204,7 @@ public final class OrbcraftStore implements PlayerStore {
     }
 
     private void flushOnline(MinecraftServer srv) {
-        long now = nowTick(srv);
+        long now = OrbcraftRuntime.nowTick(srv);
         for (ServerPlayer player : srv.getPlayerList().getPlayers()) {
             String key = PlayerStore.ownerKeyOf(player.getUUID());
             writeSession(key, now);
@@ -215,14 +213,16 @@ public final class OrbcraftStore implements PlayerStore {
 
     // ================================================================== 会话
 
-    /** 一个玩家在本进程里的会话。票据与配额不在这里 —— 它们的真相在 {@link #hatch}。 */
+    /**
+     * 一个玩家在本进程里的会话。<b>只存 {@code lastActiveTick}</b> ——
+     * 票据与配额在 {@link OrbcraftRuntime#hatch()}，定向账本在
+     * {@link OrbcraftRuntime#allowanceOf}，这里再存一份就是第二个真相。
+     */
     private static final class Session {
 
-        private TargetAllowance targets;
         private long lastActiveTick;
 
-        private Session(TargetAllowance targets, long lastActiveTick) {
-            this.targets = targets;
+        private Session(long lastActiveTick) {
             this.lastActiveTick = lastActiveTick;
         }
     }
@@ -231,15 +231,15 @@ public final class OrbcraftStore implements PlayerStore {
         if (hatchRestored.add(key)) {
             PlayerState state = readState(key);
             restoreHatch(key, state.hatch());
-            sessions.put(key, new Session(restoreLedger(key, state.targets()), now));
+            // 先装账本再让任何人 allowanceOf 取：allowanceOf 在缺项时发的是一份「额度全满」的新账本，
+            // 顺序反了玩家就白拿今天的三次定向。
+            installLedger(key, state.targets());
+            sessions.put(key, new Session(now));
             return;
         }
         Session session = sessions.get(key);
         if (session == null) {
-            // 少见：本进程已经恢复过这个玩家的票据（会话被 save 提前建过又删了），
-            // 那就只补账本，绝不能再 restore 一次。
-            session = new Session(restoreLedger(key, readState(key).targets()), now);
-            sessions.put(key, session);
+            sessions.put(key, new Session(now));
             return;
         }
         session.lastActiveTick = now;
@@ -247,7 +247,7 @@ public final class OrbcraftStore implements PlayerStore {
 
     private void restoreHatch(String key, HatchSnapshot snapshot) {
         try {
-            IncubationService.RestoreResult result = hatch.restore(snapshot);
+            IncubationService.RestoreResult result = hatch().restore(snapshot);
             if (result.quotaRepaired()) {
                 OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 的存档不自洽：存盘配额低于在途票据所需，"
                                 + "已按票据修复（quotaRepaired=true，生效配额 {}）。"
@@ -263,45 +263,25 @@ public final class OrbcraftStore implements PlayerStore {
         }
     }
 
-    private static TargetAllowance restoreLedger(String key, List<TargetAllowance.Snapshot> snapshots) {
+    /** 把存档里的定向账本装进 runtime。装不上就保持 runtime 里的现值并留日志。 */
+    private static void installLedger(String key, List<TargetAllowance.Snapshot> snapshots) {
         try {
-            return TargetAllowance.restore(TARGETS_PER_KIND, TARGETS_RETENTION_DAYS, snapshots);
+            OrbcraftRuntime.installAllowance(key,
+                    TargetAllowance.restore(OrbcraftRuntime.TARGETS_PER_KIND_PER_DAY,
+                            TARGETS_RETENTION_DAYS, snapshots));
         } catch (TargetException e) {
-            OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 的定向卡账本读不回来，按空账本继续（今天的额度会重置）：{}",
+            OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 的定向卡账本读不回来，保留内存里的账本（今天的额度可能不对）：{}",
                     key, e.getMessage());
-            return TargetAllowance.daily(TARGETS_PER_KIND, TARGETS_RETENTION_DAYS);
         }
-    }
-
-    private Session ensureSession(String key) {
-        if (key == null || key.isBlank()) {
-            throw new IllegalArgumentException("ownerKey 不能为空：它是所有账本的键");
-        }
-        Session session = sessions.get(key);
-        if (session != null) {
-            return session;
-        }
-        // 懒加载只补定向卡账本，不动孵化断面：恢复票据必须发生在登录事件里，
-        // 在任意时刻把票灌进服务会让「谁 tick 谁负责播报」的边界糊掉。
-        session = new Session(restoreLedger(key, readState(key).targets()), nowTick());
-        sessions.put(key, session);
-        return session;
     }
 
     private void adoptSession(String key, PlayerState state) {
-        TargetAllowance ledger;
-        try {
-            ledger = TargetAllowance.restore(TARGETS_PER_KIND, TARGETS_RETENTION_DAYS, state.targets());
-        } catch (TargetException e) {
-            OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 的定向卡断面非法，保留内存里的账本：{}", key, e.getMessage());
-            return;
-        }
+        installLedger(key, state.targets());
         Session session = sessions.get(key);
         if (session == null) {
-            sessions.put(key, new Session(ledger, state.lastActiveTick()));
+            sessions.put(key, new Session(state.lastActiveTick()));
             return;
         }
-        session.targets = ledger;
         session.lastActiveTick = Math.max(session.lastActiveTick, state.lastActiveTick());
     }
 
@@ -412,15 +392,15 @@ public final class OrbcraftStore implements PlayerStore {
      */
     private PlayerState snapshotOf(String key, Session session) {
         List<HatchTicket> inFlight = new ArrayList<>();
-        for (HatchTicket ticket : hatch.ticketsOf(key)) {
+        for (HatchTicket ticket : hatch().ticketsOf(key)) {
             if (ticket.occupiesSlot()) {
                 inFlight.add(ticket);
             }
         }
-        QuotaManager.State quota = hatch.stateOf(key);
+        QuotaManager.State quota = hatch().stateOf(key);
         return new PlayerState(
                 new HatchSnapshot(key, quota, inFlight),
-                session.targets.snapshot(),
+                OrbcraftRuntime.allowanceOf(key).snapshot(),
                 session.lastActiveTick);
     }
 
@@ -524,50 +504,46 @@ public final class OrbcraftStore implements PlayerStore {
     // ================================================================== 给其他四路用
 
     /**
-     * 全项目唯一的孵化服务实例。<b>所有路都必须用这一个</b>：
-     * S2 的 preview/submit、S5 的 tick、S4 的 restore 落在同一个实例上才有意义。
+     * 全项目唯一的孵化服务实例 —— <b>转发给主线</b>，本类不持有。
+     *
+     * <p>保留这个名字只是为了让四路已有的调用点（S1/S2/S5）不用改：
+     * 实例的归属由 {@link OrbcraftRuntime} 决定，这里再 new 一个就是第二套账本。
      */
     public static IncubationService hatch() {
-        return INSTANCE.hatch;
+        return OrbcraftRuntime.hatch();
     }
 
     /**
-     * 当前世界 tick —— 全项目唯一的「现在」。
+     * 当前世界 tick —— 转发给 {@link OrbcraftRuntime#nowTick}，不要再写第二份实现。
      *
-     * <p>1.21.11 里 {@code Level#getGameTime()} 已经不存在，game time 挪到了
-     * {@code LevelData#getGameTime()}；而且它<b>随世界存档持久化</b>，
-     * 这是「重启后进度接着走」的前提。{@code MinecraftServer#getTickCount()} 不行：
-     * 它每次启动从 0 重新数。
+     * <p>之所以还留这个无参重载：调用方大多只有 uuid 没有 server。
      *
      * @return 服务端还没起来时返回 0
      */
     public static long nowTick() {
         MinecraftServer srv = INSTANCE.server;
-        return srv == null ? 0L : nowTick(srv);
+        return srv == null ? 0L : OrbcraftRuntime.nowTick(srv);
     }
 
-    /** 玩家当前的定向卡账本（只含该玩家的格子）。未加载时会从磁盘补一次。 */
+    /** 玩家当前的定向卡账本（只含该玩家的格子）。没装过就是一份额度全满的新账本。 */
     public static TargetAllowance targetsOf(String ownerKey) {
-        synchronized (INSTANCE) {
-            return INSTANCE.ensureSession(ownerKey).targets;
-        }
+        return OrbcraftRuntime.allowanceOf(ownerKey);
     }
 
     /**
-     * 用掉一次定向卡额度，并把新账本写回会话、立即落盘。
+     * 用掉一次定向卡额度，把新账本装进 runtime，并立即落盘。
      *
      * <p><b>S2 请走这个方法，不要自己调 {@code TargetAllowance.use}。</b>
-     * {@code use} 返回新实例、不改原实例是设计；谁忘了把新实例存回去，这次操作就等于没发生。
-     * 存回本类才是唯一让它跨重启存活的地方。
+     * {@code use} 返回新实例、不改原实例是设计；谁忘了把新实例 {@code installAllowance}
+     * 存回去，这次操作就等于没发生。这里一次性把「扣减 + 装回 + 落盘」做完。
      *
      * @return 额度不足时 {@link Optional#empty()}（不抛异常，这是玩法分支）
      */
     public static Optional<TargetAllowance> useTarget(String ownerKey, long epochDay, BaseKind kind) {
         synchronized (INSTANCE) {
-            Session session = INSTANCE.ensureSession(ownerKey);
-            Optional<TargetAllowance> next = session.targets.use(ownerKey, epochDay, kind);
+            Optional<TargetAllowance> next = OrbcraftRuntime.allowanceOf(ownerKey).use(ownerKey, epochDay, kind);
             next.ifPresent(value -> {
-                session.targets = value;
+                OrbcraftRuntime.installAllowance(ownerKey, value);
                 // 额度是既成事实：等 5 分钟定时保存，玩家在这期间崩服就等于白拿一次。
                 INSTANCE.saveSession(ownerKey);
             });
@@ -593,11 +569,7 @@ public final class OrbcraftStore implements PlayerStore {
         if (srv == null) {
             return;
         }
-        writeSession(key, nowTick(srv));
-    }
-
-    private static long nowTick(MinecraftServer srv) {
-        return srv.overworld().getLevelData().getGameTime();
+        writeSession(key, OrbcraftRuntime.nowTick(srv));
     }
 
     /** 文件名来自 ownerKey，仍然清洗一遍：ownerKey 将来若改成含冒号/名字的形式，也不能穿越目录。 */
