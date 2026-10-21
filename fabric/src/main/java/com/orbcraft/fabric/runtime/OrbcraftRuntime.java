@@ -1,5 +1,7 @@
 package com.orbcraft.fabric.runtime;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -40,8 +42,18 @@ public final class OrbcraftRuntime {
      */
     public static final int TARGETS_PER_KIND_PER_DAY = 1;
 
-    /** 全服唯一的孵化服务。构造参数取 core 的默认值（离线封顶 8 小时、同时 5 颗）。 */
-    private static final IncubationService HATCH = new IncubationService();
+    /**
+     * 全服唯一的孵化服务。构造参数取 core 的默认值（离线封顶 8 小时、同时 5 颗）。
+     *
+     * <p>不是 {@code final}：**同一个 JVM 里可以换世界**（单人游戏退出存档再进另一个存档，
+     * 或集成服务器重开），这时旧世界的票据表必须整体丢掉。如果这里是 final，
+     * 下一次登录恢复会撞上「票据 id 已存在」，被 core 判成存档损坏并整份跳过 ——
+     * 玩家看到的是「球全丢了」，日志里却只有一条 id 重复。
+     *
+     * <p>{@code volatile} 是为了让替换对其它线程立即可见：替换发生在服务端停止线程上，
+     * 读发生在命令回调与 tick 线程上。
+     */
+    private static volatile IncubationService hatch = new IncubationService();
 
     /**
      * ownerKey → 当前生效的定向卡账本。
@@ -56,7 +68,22 @@ public final class OrbcraftRuntime {
 
     /** 全服唯一的孵化服务。要在它上面做任何状态迁移，都从这里取。 */
     public static IncubationService hatch() {
-        return HATCH;
+        return hatch;
+    }
+
+    /**
+     * 换世界前把运行期状态清空。由主线在 {@code SERVER_STOPPED} 里调用。
+     *
+     * <p>清的是「属于上一个世界的运行时状态」：在孵票据、配额占用、定向卡账本。
+     * 落盘的东西不受影响 —— 它们归 {@code PlayerStore}，下一个世界开始时按玩家逐个恢复。
+     *
+     * <p>不加这个的话，单人游戏「退出存档 → 进另一个存档」会带着上个存档的票据表，
+     * 新存档的玩家登录时 {@code restore} 撞 id，整份跳过，表现为「球全没了」。
+     * 专用服务器（一个 JVM 一个世界）永远走不到这里，但本地联调全在单人模式，不能不处理。
+     */
+    public static void resetForNewWorld() {
+        hatch = new IncubationService();
+        ALLOWANCES.clear();
     }
 
     /**
@@ -93,10 +120,28 @@ public final class OrbcraftRuntime {
     }
 
     /**
-     * 丢掉某人的内存账本。下线时调用可以少占一点内存，但<b>不是必须的</b>：
+     * 掉落某人的内存账本。下线时调用可以少占一点内存，但<b>不是必须的</b>：
      * 存档才是事实来源，登录时会重新 {@code installAllowance}。
      */
     public static void forgetAllowance(String ownerKey) {
         ALLOWANCES.remove(ownerKey);
+    }
+
+    /**
+     * 定向卡账本的「今天」：本地时区的 epoch day。
+     *
+     * <p><b>为什么必须只有一处算这个。</b> 它是额度表的键。假如构筑层按本地日期算、
+     * 存档层按 UTC 算，跨零点那几个小时里两边会各写一格：玩家在本地 00:10 用掉一次额度，
+     * 构筑记在 D 日、存档按 UTC 仍是 D-1 日，重启后账本里 D 日那格是空的 —— 额度回来了。
+     *
+     * <p><b>为什么不是 UTC。</b> 用 UTC 等于把刷新点定在 UTC 零点，东八区玩家会在
+     * 北京时间早上 8 点看到额度刷新。那不但反直觉，还能被利用：熬到 8 点白拿一次当天额度。
+     * 日期边界必须和玩家的作息对齐。
+     *
+     * <p>副作用要知道：服务器换时区（或跨时区迁移）会让「今天」跳变，可能出现一天用满两次
+     * 或一天没得用。这是本地时区的固有代价，比「所有人都在早上 8 点刷新」轻。
+     */
+    public static long todayEpochDay() {
+        return LocalDate.now(ZoneId.systemDefault()).toEpochDay();
     }
 }
