@@ -117,6 +117,13 @@ public final class OrbItemContractImpl implements OrbItemContract {
             return ThrowCheck.deny("这是别人的球");
         }
 
+        // 装备/消耗品这一版没有落地方案：投出去只会飞一段、被 S3 按契约拒绝、然后球消失，
+        // 玩家的观感是「我的装备凭空蒸发了」。宁可在手里拦下来。
+        if (!onStack.spec().isSummon()) {
+            return ThrowCheck.deny("「" + onStack.spec().displayName() + "」是"
+                    + onStack.spec().type().zh() + "，这一版还不能落地，先留在手里");
+        }
+
         Optional<HatchTicket> live = OrbcraftRuntime.hatch().ticket(onStack.ticketId());
         if (live.isEmpty()) {
             // 跨存档的旧球、或者票据被服务端丢掉了。查不到时按「不能用」处理，

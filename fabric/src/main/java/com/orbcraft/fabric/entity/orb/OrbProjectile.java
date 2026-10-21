@@ -20,6 +20,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -97,6 +98,10 @@ public final class OrbProjectile extends ThrowableItemProjectile {
         super.tick();
         if (!this.level().isClientSide() && this.tickCount > MAX_FLIGHT_TICKS) {
             // 超时按「就地落地」处理，而不是丢弃：玩家至少还能拿到产物。
+            // 这条必须留日志 —— 「球飞出去没反应」是联调时最难判的一类现象，
+            // 而这句能直接区分「被超时兜底了」还是「落地被拒了」。
+            OrbcraftMod.LOG.warn("[orbcraft] 球飞行 {} tick 仍未命中，按就地落地处理（ticket={}）",
+                    this.tickCount, this.ticketId);
             this.land(this.position());
         }
     }
@@ -104,9 +109,14 @@ public final class OrbProjectile extends ThrowableItemProjectile {
     @Override
     protected void onHit(HitResult hit) {
         super.onHit(hit);
-        // 命中点用 HitResult 的交点而不是实体坐标：方块命中时实体自身还在方块外一截，
-        // 直接取坐标会让召唤物站在墙外。
-        this.land(hit.getLocation());
+        // 命中点在方块表面上，而实体有 0.35 的碰撞箱，直接用交点会让召唤物陷进方块里。
+        // 沿命中面的法向推 0.2 格，让落点站在方块外侧 —— 贴地/避障是 S3 的边界之外，
+        // 落点该怎么给由调用方负责。
+        Vec3 pos = hit.getLocation();
+        if (hit instanceof BlockHitResult blockHit) {
+            pos = pos.add(blockHit.getDirection().getUnitVec3().scale(0.2D));
+        }
+        this.land(pos);
     }
 
     /**
@@ -139,9 +149,12 @@ public final class OrbProjectile extends ThrowableItemProjectile {
                 this.discard();
                 return;
             }
-            // 重启后 IncubationService.restore 只接在途票据（CHARGING/READY），
-            // 飞行中的 THROWN 票不会被恢复。此时球上携带的票据是唯一证据，按它兑现一次，
-            // 否则玩家会看到「球飞出去，重启后就没了」。
+            // 票据表里查不到 != 这次落地是假的：它多半来自重启前的 THROWN ——
+            // IncubationService.restore 只接在途票据（CHARGING/READY），飞行中的票不会被恢复。
+            // 此时球上携带的票据是唯一证据，按它兑现一次，而不是让玩家看到「球飞出去就没了」。
+            // 代价：这条分支没有 deploy 的幂等保护（服务里本来就没有这张票），只能靠
+            // 落盘后实体自身的存活与 isRemoved 防重入。正解是 core 增加一个「只登记不占栏」
+            // 的 THROWN 恢复入口，那是 core 的改动，不属于 S1。
             OrbcraftMod.LOG.warn("[orbcraft] 票据 {} 不在服务内（多半是重启丢了 THROWN 状态），按球上携带的票据兑现一次", id);
             first = true;
         }
