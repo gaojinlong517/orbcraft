@@ -105,6 +105,16 @@ public final class SummonLedger extends SavedData {
         return entityId == null ? null : owners.get(entityId);
     }
 
+    /**
+     * 所有记录在案的实体 id（只读快照）。
+     *
+     * <p>给「召唤物不许打主人」的 tick 守卫用：它要遍历的是账本里的实体，
+     * 而不是全世界所有 Mob —— 后者在实体多的服务器上是白扫一遍。
+     */
+    public java.util.Set<String> entityIds() {
+        return java.util.Collections.unmodifiableSet(owners.keySet());
+    }
+
     public String entityOfSpec(String specId) {
         return specId == null ? null : specs.get(specId);
     }
