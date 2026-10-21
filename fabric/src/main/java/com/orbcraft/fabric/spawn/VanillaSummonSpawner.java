@@ -229,6 +229,10 @@ public final class VanillaSummonSpawner implements SummonSpawner {
 
         UUID entityId = mob.getUUID();
         ledger.remember(spec.id(), entityId.toString(), ownerKey);
+        // 战斗数值在这里登记：召唤物一旦生成就带自己的暴击/吸血，
+        // 否则这三个键永远只是数据里的死数字。
+        com.orbcraft.fabric.combat.CombatStats.remember(
+                entityId, com.orbcraft.fabric.combat.CombatStats.of(spec.attrs()));
 
         // ---- 外观
         Integer tint = SpecTags.tintOf(SpecTags.elementOf(spec.tags()));
