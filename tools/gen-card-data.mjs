@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * 卡表生成器 —— 族定义 → 450 条词条
+ * 卡表生成器 —— 族定义 → 词条表
  *
  * 设计要点（见 docs §29.1）：
- *   手写 450 条词条不可行（ID 会拼错、数值会漂移、文案会不一致）。
- *   所以手写的是「约 50 个族」，用「族 × 载体」展开成 450 条。
- *   笔数从加法变成乘法，人手成本回到 50 个族的量级。
+ *   手写上千条词条不可行（ID 会拼错、数值会漂移、文案会不一致）。
+ *   所以手写的是「族」，用「族 × 载体」展开成词条。
+ *   笔数从加法变成乘法，人手成本回到「族」的量级。
  *
- * 展开策略：round-robin（按轮次每个族各取 1 条）。
- *   理由：如果按「族序优先」截断，靠后的族会被整族砍光，
- *   轮转能保证每个族至少留下 1 条，裁掉的只是尾部名额。
+ * 展开策略：按「载体 × 类（BASE/SIG/ELEM/SUP）」铺设，每轮每个载体各取 1 条。
+ *   理由：① 按「族序优先」截断会把靠后的族整族砍光；
+ *        ② 元素族一条就产 9 条，会挤掉签名族，让新载体和旧载体没区别。
  *
  * 用法：node tools/gen-card-data.mjs
  */
@@ -20,20 +20,67 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'core', 'src', 'main', 'resources', 'data');
-const DATA_VERSION = '1.7.0';
+const DATA_VERSION = '2.0.0';
 
 /* ------------------------------------------------------------------ */
 /* 1. 载体与元素                                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 载体表 —— 每个载体是一个「外观 + 玩法轴」的组合，不是同义词。
+ *
+ * 加新载体的唯一标准：它必须提供一种现有载体给不了的**形态或打法**。
+ * 「长剑」和「短剑」这种差异只在数值上的不进来 —— 数值差异由品质档和属性族表达，
+ * 载体负责的是玩家一眼能认出的东西（模型、动画、怎么用）。
+ *
+ * 分类轴（三类各自的「形态维度」）：
+ *   装备   — 按「交战距离 × 发力方式」分：远程弹道 / 近战挥击 / 长杆突刺 / 护具格挡
+ *   消耗品 — 按「生效方式」分：食用 / 饮下 / 施放 / 投掷 / 布置 / 生长
+ *   召唤物 — 按「机动与站位」分：地面跟随 / 空中 / 固定部署 / 群集
+ *
+ * 字段：id, 中文名, base_type
+ */
 const CARRIERS = [
-  ['gun', '枪', 'EQUIPMENT'], ['sword', '剑', 'EQUIPMENT'], ['bow', '弓', 'EQUIPMENT'],
-  ['axe', '斧', 'EQUIPMENT'], ['staff', '法杖', 'EQUIPMENT'], ['armor', '护甲', 'EQUIPMENT'],
-  ['apple', '苹果', 'CONSUMABLE'], ['potion', '药水', 'CONSUMABLE'], ['scroll', '卷轴', 'CONSUMABLE'],
-  ['bomb', '炸弹', 'CONSUMABLE'], ['feast', '盛宴', 'CONSUMABLE'],
-  ['dragon', '龙', 'SUMMON'], ['beast', '兽', 'SUMMON'], ['spirit', '精灵', 'SUMMON'],
-  ['golem', '傀儡', 'SUMMON'], ['wraith', '幽灵', 'SUMMON'], ['swarm', '虫群', 'SUMMON'],
-  ['crystal', '晶簇', 'SUMMON'],
+  // ---- 装备 12：6 原有 + 6 新增 ----
+  ['gun', '枪', 'EQUIPMENT'],        // 远程 · 弹道 · 高射速
+  ['sword', '剑', 'EQUIPMENT'],      // 近战 · 挥击 · 均衡
+  ['bow', '弓', 'EQUIPMENT'],        // 远程 · 拉弓 · 蓄力持续
+  ['axe', '斧', 'EQUIPMENT'],        // 近战 · 劈砍 · 群伤
+  ['staff', '法杖', 'EQUIPMENT'],    // 远程 · 法术 · 元素
+  ['armor', '护甲', 'EQUIPMENT'],    // 护具 · 被动承受
+  ['dagger', '匕首', 'EQUIPMENT'],   // 新增 · 近战极快 · 暴击/背刺/潜行
+  ['hammer', '重锤', 'EQUIPMENT'],   // 新增 · 钝击 · 破甲/眩晕/冲击
+  ['spear', '长矛', 'EQUIPMENT'],    // 新增 · 长杆 · 触及/贯穿（补近战与远程之间的空档）
+  ['shield', '盾', 'EQUIPMENT'],     // 新增 · 护具 · 主动格挡/还击（护甲是被动承受）
+  ['crossbow', '弩', 'EQUIPMENT'],   // 新增 · 远程 · 蓄力单发/装填
+  ['gauntlet', '拳套', 'EQUIPMENT'], // 新增 · 徒手 · 连段/招架（无弹道、无挥击轨迹）
+
+  // ---- 消耗品 10：5 原有 + 5 新增 ----
+  ['apple', '苹果', 'CONSUMABLE'],   // 食用 · 即时
+  ['potion', '药水', 'CONSUMABLE'],  // 饮下 · 即时增益
+  ['scroll', '卷轴', 'CONSUMABLE'],  // 施放 · 定向法术
+  ['bomb', '炸弹', 'CONSUMABLE'],    // 投掷 · 一次性爆裂
+  ['feast', '盛宴', 'CONSUMABLE'],   // 放置 · 群体共享
+  ['flask', '烧瓶', 'CONSUMABLE'],   // 新增 · 投掷 · 碎裂残留（炸弹是瞬时，烧瓶是持续）
+  ['rune', '符文', 'CONSUMABLE'],    // 新增 · 布置 · 触发式（需要敌人踩进来才生效）
+  ['mushroom', '蘑菇', 'CONSUMABLE'],// 新增 · 食用 · 随机/混乱（呼应失控度系统）
+  ['censer', '香炉', 'CONSUMABLE'],  // 新增 · 放置 · 持续范围光环
+  ['seed', '种子', 'CONSUMABLE'],    // 新增 · 生长 · 延时生效（越早种越划算）
+
+  // ---- 召唤物 13：7 原有 + 6 新增 ----
+  ['dragon', '龙', 'SUMMON'],        // 地面 · 单体巨兽 · 高元素
+  ['beast', '兽', 'SUMMON'],         // 地面 · 追猎 · 机动
+  ['spirit', '精灵', 'SUMMON'],      // 地面 · 辅助 · 光环
+  ['golem', '傀儡', 'SUMMON'],       // 地面 · 坦克 · 高护甲
+  ['wraith', '幽灵', 'SUMMON'],      // 地面 · 穿行 · 状态
+  ['swarm', '虫群', 'SUMMON'],       // 群集 · 数量 · 低单体
+  ['crystal', '晶簇', 'SUMMON'],     // 固定 · 结晶 · 范围
+  ['undead', '骸骨', 'SUMMON'],      // 新增 · 群集 · 死亡再生（越打越多）
+  ['bird', '猎鹰', 'SUMMON'],        // 新增 · 空中 · 俯冲/侦察（唯一的三维机动）
+  ['treant', '树人', 'SUMMON'],      // 新增 · 固定 · 扎根自愈（高血低移速）
+  ['totem', '图腾', 'SUMMON'],       // 新增 · 固定部署 · 纯光环源
+  ['wisp', '光灵', 'SUMMON'],        // 新增 · 空中 · 纯辅助（治疗/照明）
+  ['serpent', '巨蛇', 'SUMMON'],     // 新增 · 地面 · 绞缠/叠毒
 ];
 
 const ELEMENTS = [
@@ -46,135 +93,254 @@ const CARRIER_NAME = Object.fromEntries(CARRIERS.map(([id, n]) => [id, n]));
 const ELEMENT_NAME = Object.fromEntries(ELEMENTS);
 
 /* ------------------------------------------------------------------ */
-/* 2. 属性族（24 通用 + 12 召唤 + 11 消耗 + 6 元素特化）                */
-/*    字段：family, 名称, 单位, 基础值, 精度, 载体优先级, 元素维度?      */
+/* 2. 属性族                                                           */
+/*    类：BASE 通用 / SIG 专属签名 / SUP 补充 / ELEM 元素特化            */
+/*    字段：family, 名称, 单位, 基础值, 精度, 载体, [元素维度]           */
 /* ------------------------------------------------------------------ */
 
-const EQUIP = ['gun', 'sword', 'bow', 'axe', 'staff', 'armor'];
-const SUMMON = ['dragon', 'beast', 'spirit', 'golem', 'wraith', 'swarm', 'crystal'];
-const CONS = ['apple', 'potion', 'scroll', 'bomb', 'feast'];
+const EQUIP = ['gun', 'sword', 'bow', 'axe', 'staff', 'armor',
+  'dagger', 'hammer', 'spear', 'shield', 'crossbow', 'gauntlet'];
+const SUMMON = ['dragon', 'beast', 'spirit', 'golem', 'wraith', 'swarm', 'crystal',
+  'undead', 'bird', 'treant', 'totem', 'wisp', 'serpent'];
+const CONS = ['apple', 'potion', 'scroll', 'bomb', 'feast',
+  'flask', 'rune', 'mushroom', 'censer', 'seed'];
 
 const ATTRIBUTE_FAMILIES = [
-  // --- 装备通用 ---
-  ['damage', '伤害', '', 2, 0, ['gun', 'sword', 'bow', 'axe', 'staff', 'bomb', 'scroll']],
-  ['critChance', '暴击率', '%', 4, 0, ['gun', 'sword', 'bow', 'axe', 'bomb']],
-  ['critDamage', '暴击伤害', '%', 8, 0, ['gun', 'sword', 'bow', 'axe', 'bomb']],
-  ['lifesteal', '吸血', '%', 3, 0, ['gun', 'sword', 'axe', 'staff']],
+  // --- 装备通用（BASE）：每个新载体的「底盘」都从这里来 ---
+  ['damage', '伤害', '', 2, 0, ['gun', 'sword', 'bow', 'axe', 'staff', 'bomb', 'scroll',
+    'dagger', 'hammer', 'spear', 'crossbow', 'gauntlet', 'flask', 'rune']],
+  ['critChance', '暴击率', '%', 4, 0, ['gun', 'sword', 'bow', 'axe', 'bomb', 'dagger', 'crossbow', 'gauntlet']],
+  ['critDamage', '暴击伤害', '%', 8, 0, ['gun', 'sword', 'bow', 'axe', 'bomb', 'dagger', 'crossbow', 'spear']],
+  ['lifesteal', '吸血', '%', 3, 0, ['gun', 'sword', 'axe', 'staff', 'dagger', 'gauntlet', 'serpent']],
   ['durability', '耐久', '%', 15, 0, EQUIP],
-  ['statusChance', '状态触发率', '%', 5, 0, ['gun', 'sword', 'bow', 'staff', 'bomb', 'scroll']],
-  ['statusDuration', '状态持续', 's', 0.5, 1, ['gun', 'sword', 'bow', 'staff', 'bomb', 'scroll']],
-  ['elementPower', '元素强度', '%', 6, 0, ['staff', 'gun', 'bow', 'scroll']],
-  ['fireRate', '射速', '%', 6, 0, ['gun', 'bow']],
-  ['pierce', '穿透', '', 1, 0, ['gun', 'bow']],
-  ['range', '射程', '', 1.5, 1, ['gun', 'bow', 'staff', 'bomb', 'scroll']],
-  ['accuracy', '精度', '%', 5, 0, ['gun', 'bow']],
-  ['attackSpeed', '攻速', '%', 5, 0, ['sword', 'axe', 'staff']],
-  ['knockback', '击退', '', 0.4, 1, ['sword', 'axe', 'staff']],
-  ['aoeRadius', '范围', '', 0.5, 1, ['staff', 'bomb', 'scroll']],
-  ['cooldownReduction', '冷却缩减', '%', 5, 0, ['staff', 'scroll']],
-  ['armor', '护甲', '', 1, 0, ['armor']],
-  ['maxHealth', '生命上限', '', 2, 0, ['armor', 'feast']],
-  ['moveSpeed', '移速', '%', 3, 0, ['armor', 'apple', 'feast']],
-  ['thorns', '荆棘', '', 2, 0, ['armor']],
-  ['ammoCapacity', '弹匣容量', '', 2, 0, ['gun']],
-  ['drawSpeed', '拉弓速度', '%', 6, 0, ['bow']],
-  ['cleave', '顺劈', '', 1, 0, ['axe']],
-  ['blockChance', '格挡率', '%', 4, 0, ['sword', 'armor']],
+  ['statusChance', '状态触发率', '%', 5, 0, ['gun', 'sword', 'bow', 'staff', 'bomb', 'scroll',
+    'dagger', 'hammer', 'spear', 'gauntlet', 'serpent', 'mushroom']],
+  ['statusDuration', '状态持续', 's', 0.5, 1, ['gun', 'sword', 'bow', 'staff', 'bomb', 'scroll',
+    'dagger', 'hammer', 'spear', 'gauntlet', 'serpent']],
+  ['elementPower', '元素强度', '%', 6, 0, ['staff', 'gun', 'bow', 'scroll', 'wisp', 'censer', 'totem', 'rune']],
+  ['fireRate', '射速', '%', 6, 0, ['gun', 'bow', 'crossbow']],
+  ['pierce', '穿透', '', 1, 0, ['gun', 'bow', 'crossbow', 'spear']],
+  ['range', '射程', '', 1.5, 1, ['gun', 'bow', 'staff', 'bomb', 'scroll', 'crossbow', 'spear', 'censer', 'wisp']],
+  ['accuracy', '精度', '%', 5, 0, ['gun', 'bow', 'crossbow', 'spear']],
+  ['attackSpeed', '攻速', '%', 5, 0, ['sword', 'axe', 'staff', 'dagger', 'gauntlet', 'spear', 'hammer']],
+  ['knockback', '击退', '', 0.4, 1, ['sword', 'axe', 'staff', 'hammer', 'shield', 'gauntlet']],
+  ['aoeRadius', '范围', '', 0.5, 1, ['staff', 'bomb', 'scroll', 'hammer', 'flask', 'censer', 'totem']],
+  ['cooldownReduction', '冷却缩减', '%', 5, 0, ['staff', 'scroll', 'rune', 'totem']],
+  ['armor', '护甲', '', 1, 0, ['armor', 'shield', 'treant']],
+  ['maxHealth', '生命上限', '', 2, 0, ['armor', 'feast', 'shield', 'treant', 'golem']],
+  ['moveSpeed', '移速', '%', 3, 0, ['armor', 'apple', 'feast', 'bird', 'wisp']],
+  ['thorns', '荆棘', '', 2, 0, ['armor', 'shield', 'treant', 'crystal']],
+  ['ammoCapacity', '弹匣容量', '', 2, 0, ['gun', 'crossbow']],
+  ['drawSpeed', '拉弓上弦', '%', 6, 0, ['bow', 'crossbow']],
+  ['cleave', '顺劈', '', 1, 0, ['axe', 'spear', 'gauntlet', 'hammer']],
+  ['blockChance', '格挡率', '%', 4, 0, ['sword', 'armor', 'shield', 'gauntlet']],
 
-  // --- 召唤通用 ---
+  // --- 召唤通用（BASE）---
   ['summonHealth', '召唤生命', '%', 10, 0, SUMMON],
   ['summonDamage', '召唤攻击', '%', 8, 0, SUMMON],
   ['summonSpeed', '召唤移速', '%', 4, 0, SUMMON],
   ['summonStability', '稳定性', '%', 6, 0, SUMMON],
 
-  // --- 召唤专属 ---
-  ['summonCount', '召唤数量', '', 1, 0, ['dragon', 'golem', 'swarm', 'beast']],
-  ['summonLifespan', '存续时间', 's', 15, 0, ['beast', 'spirit', 'wraith', 'swarm']],
-  ['summonArmor', '召唤护甲', '', 2, 0, ['golem', 'dragon', 'beast']],
-  ['summonRegen', '召唤自愈', '%', 1, 0, ['spirit', 'crystal']],
-  ['summonElement', '召唤元素强度', '%', 6, 0, ['dragon', 'spirit', 'wraith', 'crystal']],
-  ['summonAoe', '召唤攻击范围', '', 0.5, 1, ['swarm', 'crystal', 'dragon']],
+  // --- 召唤专属（BASE）---
+  ['summonCount', '召唤数量', '', 1, 0, ['dragon', 'golem', 'swarm', 'beast', 'undead', 'bird', 'serpent']],
+  ['summonLifespan', '存续时间', 's', 15, 0, ['beast', 'spirit', 'wraith', 'swarm', 'undead', 'bird', 'wisp']],
+  ['summonArmor', '召唤护甲', '', 2, 0, ['golem', 'dragon', 'beast', 'treant', 'totem', 'undead']],
+  ['summonRegen', '召唤自愈', '%', 1, 0, ['spirit', 'crystal', 'treant', 'wisp']],
+  ['summonElement', '召唤元素强度', '%', 6, 0, ['dragon', 'spirit', 'wraith', 'crystal', 'wisp', 'serpent']],
+  ['summonAoe', '召唤攻击范围', '', 0.5, 1, ['swarm', 'crystal', 'dragon', 'totem', 'bird']],
 
-  // --- 消耗品通用 ---
+  // --- 消耗品通用（BASE）---
   ['duration', '持续时间', 's', 5, 0, CONS],
   ['potency', '效果强度', '%', 10, 0, CONS],
-  ['charges', '使用次数', '', 1, 0, ['potion', 'scroll', 'bomb', 'feast', 'apple']],
+  ['charges', '使用次数', '', 1, 0, CONS],
 
-  // --- 消耗品专属 ---
-  ['healing', '治疗', '', 3, 0, ['apple', 'potion', 'feast']],
-  ['hunger', '饱食', '', 3, 0, ['apple', 'feast']],
-  ['haste', '疾跑', '%', 10, 0, ['apple']],
-  ['xpBonus', '经验获取', '%', 8, 0, ['potion']],
-  ['lootBonus', '掉落加成', '%', 5, 0, ['potion']],
-  ['blastRadius', '爆炸半径', '', 0.5, 1, ['bomb']],
-  ['blastDamage', '爆炸伤害', '', 3, 0, ['bomb']],
-  ['shieldAmount', '护盾值', '', 3, 0, ['potion']],
+  // --- 消耗品专属（BASE）---
+  ['healing', '治疗', '', 3, 0, ['apple', 'potion', 'feast', 'wisp', 'mushroom', 'seed']],
+  ['hunger', '饱食', '', 3, 0, ['apple', 'feast', 'mushroom']],
+  ['haste', '疾跑', '%', 10, 0, ['apple', 'flask']],
+  ['xpBonus', '经验获取', '%', 8, 0, ['potion', 'mushroom']],
+  ['lootBonus', '掉落加成', '%', 5, 0, ['potion', 'seed']],
+  ['blastRadius', '爆炸半径', '', 0.5, 1, ['bomb', 'flask', 'rune']],
+  ['blastDamage', '爆炸伤害', '', 3, 0, ['bomb', 'flask', 'rune']],
+  ['shieldAmount', '护盾值', '', 3, 0, ['potion', 'censer', 'shield']],
 
-  // --- 补充族：专为冷门载体（消耗品 / 部分召唤物）扩池 ---
+  // --- 补充族（SUP）：专为冷门载体扩池 ---
   // 起因：元素特化族（elemResist 等）虽然产生几十条数据，
   // 但「去同族」后只算 1 个族，对池子多样性几乎没有贡献。
   // 所以这些载体需要真正的基础族，否则抽 5 张会把池子掏空。
-  ['regen', '生命回复', '%', 1, 0, ['armor', 'apple', 'potion', 'feast', 'spirit', 'golem', 'beast']],
-  ['resist', '抗性', '%', 4, 0, ['armor', 'potion', 'feast', 'golem', 'dragon', 'scroll']],
-  ['summonCrit', '召唤暴击', '%', 5, 0, ['dragon', 'wraith', 'spirit', 'crystal', 'swarm', 'golem', 'beast']],
-  ['summonStatus', '召唤状态触发', '%', 4, 0, ['dragon', 'wraith', 'spirit', 'crystal', 'swarm']],
-  ['summonAggro', '召唤仇恨', '%', 10, 0, ['golem', 'beast', 'dragon', 'wraith', 'swarm']],
-  ['stackLimit', '叠加上限', '', 1, 0, ['apple', 'potion', 'scroll', 'bomb', 'feast']],
-  ['triggerRadius', '触发范围', '', 0.5, 1, ['bomb', 'scroll', 'apple', 'feast']],
-  ['useSpeed', '使用速度', '%', 8, 0, ['apple', 'potion', 'feast', 'scroll']],
-  ['agility', '灵活', '%', 3, 0, ['armor', 'apple', 'beast', 'wraith', 'swarm']],
-  ['focus', '专注', '%', 4, 0, ['staff', 'scroll', 'potion', 'sword']],
+  ['regen', '生命回复', '%', 1, 0, ['armor', 'apple', 'potion', 'feast', 'spirit', 'golem', 'beast',
+    'treant', 'wisp', 'mushroom', 'seed']],
+  ['resist', '抗性', '%', 4, 0, ['armor', 'potion', 'feast', 'golem', 'dragon', 'scroll',
+    'shield', 'totem', 'treant']],
+  ['summonCrit', '召唤暴击', '%', 5, 0, ['dragon', 'wraith', 'spirit', 'crystal', 'swarm', 'golem',
+    'beast', 'undead', 'bird', 'serpent']],
+  ['summonStatus', '召唤状态触发', '%', 4, 0, ['dragon', 'wraith', 'spirit', 'crystal', 'swarm',
+    'serpent', 'undead']],
+  ['summonAggro', '召唤仇恨', '%', 10, 0, ['golem', 'beast', 'dragon', 'wraith', 'swarm',
+    'undead', 'totem', 'treant']],
+  ['stackLimit', '叠加上限', '', 1, 0, CONS],
+  ['triggerRadius', '触发范围', '', 0.5, 1, ['bomb', 'scroll', 'apple', 'feast', 'flask', 'rune', 'seed', 'mushroom']],
+  ['useSpeed', '使用速度', '%', 8, 0, ['apple', 'potion', 'feast', 'scroll', 'flask', 'mushroom', 'seed']],
+  ['agility', '灵活', '%', 3, 0, ['armor', 'apple', 'beast', 'wraith', 'swarm', 'dagger', 'bird', 'gauntlet']],
+  ['focus', '专注', '%', 4, 0, ['staff', 'scroll', 'potion', 'sword', 'crossbow', 'wisp', 'totem']],
 
-  // --- 元素特化（element 维度）---
-  ['elemDamage', '元素伤害', '%', 6, 0, ['gun', 'sword', 'bow', 'staff'], ELEMENTS.map((e) => e[0])],
-  ['elemResist', '元素抗性', '%', 5, 0, ['armor'], ELEMENTS.map((e) => e[0])],
-  ['elemAffinity', '元素亲和', '%', 5, 0, ['staff'], ELEMENTS.map((e) => e[0])],
-  ['elemAura', '元素光环', '%', 4, 0, ['spirit', 'crystal'], ELEMENTS.map((e) => e[0])],
-  ['elemSummonDamage', '召唤元素伤害', '%', 7, 0, ['dragon', 'wraith'], ELEMENTS.map((e) => e[0])],
-  ['elemSummonResist', '召唤元素抗性', '%', 4, 0, ['golem', 'crystal'], ELEMENTS.map((e) => e[0])],
+  // --- 元素特化（ELEM）---
+  ['elemDamage', '元素伤害', '%', 6, 0, ['gun', 'sword', 'bow', 'staff', 'dagger', 'crossbow', 'spear'], ELEMENTS.map((e) => e[0])],
+  ['elemResist', '元素抗性', '%', 5, 0, ['armor', 'shield', 'totem'], ELEMENTS.map((e) => e[0])],
+  ['elemAffinity', '元素亲和', '%', 5, 0, ['staff', 'wisp', 'censer', 'rune'], ELEMENTS.map((e) => e[0])],
+  ['elemAura', '元素光环', '%', 4, 0, ['spirit', 'crystal', 'totem', 'wisp'], ELEMENTS.map((e) => e[0])],
+  ['elemSummonDamage', '召唤元素伤害', '%', 7, 0, ['dragon', 'wraith', 'serpent', 'bird', 'undead'], ELEMENTS.map((e) => e[0])],
+  ['elemSummonResist', '召唤元素抗性', '%', 4, 0, ['golem', 'crystal', 'treant', 'totem'], ELEMENTS.map((e) => e[0])],
+
+  // --- 装备签名（SIG）：每个新载体 2 条，只给它自己或同轴的载体 ---
+  // 这些族存在的意义：让「匕首」和「剑」不只是数值不同，
+  // 而是各自有一条只有自己能滚到的属性轴。
+  ['backstab', '背刺伤害', '%', 8, 0, ['dagger', 'sword']],
+  ['bleedDamage', '流血伤害', '%', 6, 0, ['dagger', 'axe', 'serpent']],
+  ['armorBreak', '破甲值', '', 2, 0, ['hammer', 'axe']],
+  ['impactPower', '冲击力', '', 1, 0, ['hammer', 'shield']],
+  ['reach', '触及', '', 0.5, 1, ['spear', 'staff', 'censer']],
+  ['thrustDamage', '突刺伤害', '%', 7, 0, ['spear', 'crossbow']],
+  ['blockPower', '格挡强度', '%', 6, 0, ['shield', 'sword']],
+  ['staggerResist', '硬直抵抗', '%', 5, 0, ['shield', 'armor', 'golem']],
+  ['reloadSpeed', '装填速度', '%', 8, 0, ['crossbow', 'gun']],
+  ['firstShotDamage', '首发伤害', '%', 10, 0, ['crossbow', 'gun']],
+  ['parryChance', '招架率', '%', 4, 0, ['gauntlet', 'sword', 'shield']],
+  ['comboStage', '连段上限', '', 1, 0, ['gauntlet', 'dagger']],
+
+  // --- 召唤签名（SIG）：每个新载体 2 条 ---
+  ['summonRevive', '复苏次数', '', 1, 0, ['undead', 'wraith']],
+  ['summonSacrifice', '献祭强度', '%', 6, 0, ['undead', 'wraith', 'serpent']],
+  ['summonFlySpeed', '飞行速度', '%', 5, 0, ['bird', 'wraith', 'spirit']],
+  ['diveDamage', '俯冲伤害', '%', 9, 0, ['bird', 'dragon']],
+  ['rootStrength', '扎根强度', '%', 6, 0, ['treant', 'totem']],
+  ['growthRate', '成长速率', '%', 5, 0, ['treant', 'seed', 'crystal']],
+  ['auraRadius', '光环范围', '', 0.5, 1, ['totem', 'censer', 'spirit']],
+  ['auraPower', '光环强度', '%', 5, 0, ['totem', 'censer', 'wisp']],
+  ['deploySpeed', '部署速度', '%', 8, 0, ['totem', 'rune']],
+  ['healPower', '治疗强度', '%', 8, 0, ['wisp', 'potion', 'apple', 'feast', 'spirit', 'seed']],
+  ['lightRadius', '照明范围', '', 1, 0, ['wisp', 'crystal']],
+  ['poisonPotency', '毒性强度', '%', 5, 0, ['serpent', 'swarm', 'wraith', 'potion', 'mushroom']],
+
+  // --- 消耗品签名（SIG）：每个新载体 2 条（香炉与种子各 1 条，另靠通用族补足）---
+  ['splashRadius', '溅射半径', '', 0.5, 1, ['flask', 'bomb']],
+  ['lingering', '残留时间', 's', 3, 0, ['flask', 'censer', 'mushroom']],
+  ['runePower', '符文强度', '%', 7, 0, ['rune', 'scroll']],
+  ['armTime', '布防时间', 's', 2, 0, ['rune', 'bomb', 'seed']],
+  ['chaosBias', '混乱偏向', '%', 8, 0, ['mushroom', 'flask']],
+  ['growTime', '生长时间', 's', 8, 0, ['seed', 'treant']],
+  ['yieldBonus', '产出加成', '%', 6, 0, ['seed', 'feast', 'apple']],
+  ['censerRate', '熏燃速率', '%', 6, 0, ['censer', 'mushroom']],
 ];
 
-const TARGET_ATTRIBUTE = 243;
+/** 签名族清单：用于「按类交错」铺设时区分对待。 */
+const SIG_ATTR = new Set([
+  'backstab', 'bleedDamage', 'armorBreak', 'impactPower', 'reach', 'thrustDamage',
+  'blockPower', 'staggerResist', 'reloadSpeed', 'firstShotDamage', 'parryChance', 'comboStage',
+  'summonRevive', 'summonSacrifice', 'summonFlySpeed', 'diveDamage', 'rootStrength', 'growthRate',
+  'auraRadius', 'auraPower', 'deploySpeed', 'healPower', 'lightRadius', 'poisonPotency',
+  'splashRadius', 'lingering', 'runePower', 'armTime', 'chaosBias', 'growTime', 'yieldBonus', 'censerRate',
+]);
+
+/** 补充族清单：池子宽但语义泛，抽卡时不该挤掉签名族。 */
+const SUP_ATTR = new Set([
+  'regen', 'resist', 'summonCrit', 'summonStatus', 'summonAggro',
+  'stackLimit', 'triggerRadius', 'useSpeed', 'agility', 'focus',
+]);
+
+const TARGET_ATTRIBUTE = 700;
 
 /* ------------------------------------------------------------------ */
-/* 3. 效果族（30 × 6 载体 = 180）                                       */
-/*    字段：family, 名称, 载体优先级, 元素限定?, 与哪些族冲突            */
+/* 3. 效果族                                                           */
+/*    类：BASE 通用 / SIG 载体签名                                      */
+/*    字段：family, 名称, 载体, 元素限定?, 与哪些族冲突                  */
 /* ------------------------------------------------------------------ */
 
 const EFFECT_FAMILIES = [
-  ['ignite', '燃烧', ['gun', 'sword', 'bow', 'axe', 'staff', 'bomb'], ['fire'], []],
-  ['shock', '感电', ['gun', 'bow', 'staff', 'dragon', 'spirit', 'bomb'], ['lightning'], []],
-  ['freeze', '冰冻', ['sword', 'staff', 'bow', 'armor', 'crystal', 'bomb'], ['ice'], []],
-  ['poisonStack', '淬毒', ['sword', 'axe', 'bow', 'swarm', 'spirit', 'potion'], ['poison'], []],
-  ['blind', '致盲', ['staff', 'bomb', 'gun', 'wraith', 'scroll', 'apple'], null, []],
-  ['stun', '眩晕', ['axe', 'staff', 'bomb', 'golem', 'dragon', 'armor', 'bow'], null, []],
-  ['explosion', '爆裂', ['bomb', 'staff', 'gun', 'axe', 'crystal', 'swarm', 'bow'], null, ['freeze']],
-  ['chain', '连锁', ['staff', 'gun', 'bow', 'spirit', 'wraith', 'crystal'], null, ['execute']],
-  ['lifestealAura', '吸血光环', ['sword', 'axe', 'armor', 'wraith', 'dragon', 'spirit'], null, ['execute']],
-  ['thornsBurst', '荆棘反伤', ['armor', 'sword', 'golem', 'beast', 'crystal', 'staff'], null, []],
-  ['shield', '护盾', ['armor', 'potion', 'golem', 'spirit', 'scroll', 'apple', 'feast'], null, []],
-  ['sprint', '疾跑', ['apple', 'potion', 'armor', 'beast', 'wraith', 'scroll', 'feast', 'swarm'], null, ['slowField']],
-  ['invisibility', '隐身', ['potion', 'wraith', 'scroll', 'armor', 'spirit', 'feast', 'bow'], null, ['auraBuff']],
-  ['jumpBoost', '跃升', ['armor', 'apple', 'beast', 'swarm', 'scroll', 'potion', 'feast'], null, []],
-  ['nightVision', '夜视', ['potion', 'scroll', 'armor', 'apple', 'wraith', 'spirit'], null, []],
-  ['waterBreathing', '水下呼吸', ['potion', 'armor', 'scroll', 'apple', 'spirit', 'beast'], null, []],
-  ['fireResist', '火焰抗性', ['armor', 'potion', 'apple', 'golem', 'dragon', 'scroll'], null, []],
-  ['summonSplit', '分裂', ['swarm', 'crystal', 'spirit', 'wraith', 'beast', 'golem'], null, ['summonEnrage']],
-  ['summonEnrage', '狂暴', ['beast', 'dragon', 'wraith', 'swarm', 'golem', 'crystal'], null, ['summonSplit']],
-  ['deathBoom', '亡语爆炸', ['bomb', 'golem', 'crystal', 'swarm', 'dragon', 'wraith'], null, []],
-  ['magnet', '磁吸', ['armor', 'gun', 'apple', 'scroll', 'potion', 'sword', 'feast'], null, []],
-  ['counter', '反击', ['sword', 'armor', 'axe', 'golem', 'beast', 'dragon', 'feast', 'swarm'], null, []],
-  ['reflect', '反弹', ['armor', 'staff', 'sword', 'crystal', 'spirit', 'golem'], null, []],
-  ['armorPierce', '破甲', ['gun', 'bow', 'axe', 'wraith', 'staff', 'sword'], null, []],
-  ['combo', '连击', ['gun', 'sword', 'bow', 'axe', 'staff', 'swarm'], null, []],
-  ['execute', '处决', ['sword', 'axe', 'gun', 'bow', 'dragon', 'wraith'], null, ['chain', 'lifestealAura']],
-  ['slowField', '缓速场', ['staff', 'crystal', 'spirit', 'armor', 'scroll', 'bomb'], null, ['sprint']],
-  ['blink', '闪现', ['wraith', 'spirit', 'scroll', 'potion', 'armor', 'apple'], null, []],
-  ['auraBuff', '增益光环', ['spirit', 'dragon', 'crystal', 'golem', 'beast', 'armor', 'feast'], null, ['invisibility']],
-  ['lastStand', '濒死爆发', ['armor', 'apple', 'potion', 'sword', 'beast', 'scroll', 'feast'], null, []],
+  // --- 通用（BASE）---
+  ['ignite', '燃烧', ['gun', 'sword', 'bow', 'axe', 'staff', 'bomb', 'flask', 'censer', 'hammer'], ['fire'], []],
+  ['shock', '感电', ['gun', 'bow', 'staff', 'dragon', 'spirit', 'bomb', 'crossbow', 'totem'], ['lightning'], []],
+  ['freeze', '冰冻', ['sword', 'staff', 'bow', 'armor', 'crystal', 'bomb', 'flask'], ['ice'], []],
+  ['poisonStack', '淬毒', ['sword', 'axe', 'bow', 'swarm', 'spirit', 'potion', 'dagger', 'serpent', 'mushroom', 'flask'], ['poison'], []],
+  ['blind', '致盲', ['staff', 'bomb', 'gun', 'wraith', 'scroll', 'apple', 'mushroom', 'censer'], null, []],
+  ['stun', '眩晕', ['axe', 'staff', 'bomb', 'golem', 'dragon', 'armor', 'bow', 'hammer', 'shield', 'spear', 'rune'], null, []],
+  ['explosion', '爆裂', ['bomb', 'staff', 'gun', 'axe', 'crystal', 'swarm', 'bow', 'flask', 'rune', 'hammer', 'crossbow', 'mushroom'], null, ['freeze']],
+  ['chain', '连锁', ['staff', 'gun', 'bow', 'spirit', 'wraith', 'crystal', 'totem', 'rune'], null, ['execute']],
+  ['lifestealAura', '吸血光环', ['sword', 'axe', 'armor', 'wraith', 'dragon', 'spirit', 'undead', 'serpent', 'dagger', 'gauntlet'], null, ['execute']],
+  ['thornsBurst', '荆棘反伤', ['armor', 'sword', 'golem', 'beast', 'crystal', 'staff', 'shield', 'treant', 'gauntlet'], null, []],
+  ['shield', '护盾', ['armor', 'potion', 'golem', 'spirit', 'scroll', 'apple', 'feast', 'shield', 'totem', 'wisp', 'undead', 'rune'], null, []],
+  ['sprint', '疾跑', ['apple', 'potion', 'armor', 'beast', 'wraith', 'scroll', 'feast', 'swarm', 'bird', 'gauntlet'], null, ['slowField']],
+  ['invisibility', '隐身', ['potion', 'wraith', 'scroll', 'armor', 'spirit', 'feast', 'bow', 'dagger'], null, ['auraBuff']],
+  ['jumpBoost', '跃升', ['armor', 'apple', 'beast', 'swarm', 'scroll', 'potion', 'feast', 'bird'], null, []],
+  ['nightVision', '夜视', ['potion', 'scroll', 'armor', 'apple', 'wraith', 'spirit', 'wisp', 'bird'], null, []],
+  ['waterBreathing', '水下呼吸', ['potion', 'armor', 'scroll', 'apple', 'spirit', 'beast', 'wisp'], null, []],
+  ['fireResist', '火焰抗性', ['armor', 'potion', 'apple', 'golem', 'dragon', 'scroll', 'censer'], null, []],
+  ['summonSplit', '分裂', ['swarm', 'crystal', 'spirit', 'wraith', 'beast', 'golem', 'undead', 'mushroom'], null, ['summonEnrage']],
+  ['summonEnrage', '狂暴', ['beast', 'dragon', 'wraith', 'swarm', 'golem', 'crystal', 'serpent', 'undead'], null, ['summonSplit']],
+  ['deathBoom', '亡语爆炸', ['bomb', 'golem', 'crystal', 'swarm', 'dragon', 'wraith', 'undead', 'rune'], null, []],
+  ['magnet', '磁吸', ['armor', 'gun', 'apple', 'scroll', 'potion', 'sword', 'feast', 'seed'], null, []],
+  ['counter', '反击', ['sword', 'armor', 'axe', 'golem', 'beast', 'dragon', 'feast', 'swarm', 'shield', 'gauntlet', 'hammer', 'spear'], null, []],
+  ['reflect', '反弹', ['armor', 'staff', 'sword', 'crystal', 'spirit', 'golem', 'shield', 'totem'], null, []],
+  ['armorPierce', '破甲', ['gun', 'bow', 'axe', 'wraith', 'staff', 'sword', 'hammer', 'spear', 'crossbow', 'bird'], null, []],
+  ['combo', '连击', ['gun', 'sword', 'bow', 'axe', 'staff', 'swarm', 'dagger', 'gauntlet', 'crossbow', 'hammer', 'spear'], null, []],
+  ['execute', '处决', ['sword', 'axe', 'gun', 'bow', 'dragon', 'wraith', 'dagger', 'serpent', 'spear', 'bird'], null, ['chain', 'lifestealAura']],
+  ['slowField', '缓速场', ['staff', 'crystal', 'spirit', 'armor', 'scroll', 'bomb', 'treant', 'totem', 'serpent', 'flask', 'rune'], null, ['sprint']],
+  ['blink', '闪现', ['wraith', 'spirit', 'scroll', 'potion', 'armor', 'apple', 'dagger', 'bird'], null, []],
+  ['auraBuff', '增益光环', ['spirit', 'dragon', 'crystal', 'golem', 'beast', 'armor', 'feast', 'totem', 'censer', 'wisp'], null, ['invisibility']],
+  ['lastStand', '濒死爆发', ['armor', 'apple', 'potion', 'sword', 'beast', 'scroll', 'feast', 'shield', 'gauntlet', 'undead'], null, []],
+
+  // --- 装备签名（SIG）---
+  // 每个新载体 2 条：一条强化它「本来就会做」的事，一条给它独有的机制。
+  ['bleed', '流血', ['dagger', 'sword', 'axe', 'spear', 'serpent'], null, []],
+  ['shadowStep', '暗影步', ['dagger', 'wraith', 'bird'], null, []],
+  ['shatter', '碎甲', ['hammer', 'axe', 'crossbow'], null, ['armorPierce']],
+  ['shockwave', '震荡波', ['hammer', 'golem', 'shield', 'totem'], null, []],
+  ['pierceLine', '贯穿', ['spear', 'crossbow', 'gun'], null, []],
+  ['impale', '钉刺', ['spear', 'crystal', 'serpent'], null, []],
+  ['bulwark', '壁垒', ['shield', 'golem', 'armor', 'totem'], null, []],
+  ['riposte', '还击', ['shield', 'sword', 'gauntlet'], null, []],
+  ['volley', '齐射', ['crossbow', 'bow', 'gun'], null, []],
+  ['steady', '定装', ['crossbow', 'gun', 'bow'], null, []],
+  ['flurry', '连打', ['gauntlet', 'dagger', 'swarm'], null, []],
+  ['ironFist', '铁拳', ['gauntlet', 'beast', 'hammer'], null, []],
+
+  // --- 召唤签名（SIG）---
+  ['bonePile', '骨堆', ['undead', 'swarm'], null, []],
+  ['soulHarvest', '收魂', ['undead', 'wraith', 'serpent'], null, []],
+  ['dive', '俯冲', ['bird', 'dragon', 'wraith'], null, []],
+  ['scout', '侦察', ['bird', 'wisp', 'spirit'], null, []],
+  ['rootSnare', '根须缠', ['treant', 'serpent', 'seed'], null, []],
+  ['photosynth', '光合', ['treant', 'wisp', 'seed'], null, []],
+  ['wardAura', '守护光环', ['totem', 'censer', 'spirit', 'shield'], null, []],
+  ['pulse', '脉冲', ['totem', 'crystal', 'wisp'], null, []],
+  ['mend', '愈合', ['wisp', 'spirit', 'potion', 'apple', 'seed'], null, []],
+  ['holyLight', '圣光', ['wisp', 'crystal', 'scroll', 'shield'], null, []],
+  ['venom', '剧毒', ['serpent', 'swarm', 'wraith', 'mushroom'], null, []],
+  ['constrict', '绞缠', ['serpent', 'beast', 'treant'], null, []],
+
+  // --- 消耗品签名（SIG）---
+  ['splash', '泼溅', ['flask', 'bomb', 'potion'], null, []],
+  ['volatile', '挥发', ['flask', 'censer', 'mushroom'], null, []],
+  ['inscribe', '铭刻', ['rune', 'scroll', 'censer'], null, []],
+  ['trap', '陷阱', ['rune', 'bomb', 'seed'], null, []],
+  ['spore', '孢子', ['mushroom', 'treant', 'censer', 'swarm'], null, []],
+  ['mutate', '变异', ['mushroom', 'flask', 'potion'], null, []],
+  ['incense', '熏香', ['censer', 'feast', 'wisp'], null, []],
+  ['sprout', '萌芽', ['seed', 'treant', 'crystal'], null, []],
+  ['harvest', '采收', ['seed', 'apple', 'feast'], null, []],
+  ['burstRoot', '破土', ['seed', 'golem', 'treant'], null, []],
 ];
 
-const TARGET_EFFECT = 180;
+/** 通用效果族清单：SIG 之外的都是 BASE。 */
+const BASE_EFFECTS = new Set([
+  'ignite', 'shock', 'freeze', 'poisonStack', 'blind', 'stun', 'explosion', 'chain',
+  'lifestealAura', 'thornsBurst', 'shield', 'sprint', 'invisibility', 'jumpBoost',
+  'nightVision', 'waterBreathing', 'fireResist', 'summonSplit', 'summonEnrage',
+  'deathBoom', 'magnet', 'counter', 'reflect', 'armorPierce', 'combo', 'execute',
+  'slowField', 'blink', 'auraBuff', 'lastStand',
+]);
+
+const TARGET_EFFECT = 380;
 
 /* ------------------------------------------------------------------ */
 /* 3.5 派生协同表（140 条）                                             */
@@ -400,31 +566,59 @@ function buildTiers(baseValue, precision, unit, name, baseType, family) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 5. 展开：round-robin                                                 */
+/* 5. 展开：按「载体 × 类」铺设                                          */
 /* ------------------------------------------------------------------ */
 
-function roundRobin(families, target) {
-  // 按「载体」而非「族」做轮转。
-  //
-  // 这是一个踩过的坑：最初按族轮转，每个族取第 k 个候选。
-  // 结果任何被追加到族尾部的载体（如 feast 在第 7 位）永远轮不到，
-  // 因为 30 族 × 6 候选正好等于 180，第 7 轮一个名额都没有 ——
-  // feast 的效果池因此只剩 1 条，玩家抽效果层只有一张牌。
-  //
-  // 改成载体优先后，每个载体每轮各取 1 条，先保证人人有份，
-  // 候选少的载体（斧只有 8 条）提前耗尽，剩余名额回流给其它载体。
-  const byCarrier = new Map();
+/**
+ * 类的交错顺序。每个载体拿牌时按 BASE → SIG → ELEM → SUP 循环，
+ * 一轮各取 1 条，取完再从头。
+ *
+ * 为什么要有这一步：元素特化族一条族就产出 9 条（9 个元素），
+ * 如果按「族序平铺」，一个载体的候选前 9 位会被元素占满，
+ * 名额一截断，先死的一定是排在后面的签名族 ——
+ * 表现就是「匕首和剑除了数值没有任何区别」。
+ * 交错之后，预算停在哪一轮，每一类都已经有代表。
+ */
+const CLASS_CYCLE = ['BASE', 'SIG', 'ELEM', 'SUP'];
+
+function stratify(families) {
+  const buckets = new Map(); // carrier -> { BASE:[], SIG:[], ELEM:[], SUP:[] }
   for (const f of families) {
     for (const c of f.candidates) {
       const carrier = c.carrier_allow[0];
-      if (!byCarrier.has(carrier)) byCarrier.set(carrier, []);
-      byCarrier.get(carrier).push(c);
+      if (!buckets.has(carrier)) {
+        buckets.set(carrier, { BASE: [], SIG: [], ELEM: [], SUP: [] });
+      }
+      buckets.get(carrier)[f.cls].push(c);
     }
   }
+  const out = new Map();
+  for (const [carrier, b] of buckets) {
+    const list = [];
+    for (let round = 0; ; round++) {
+      let added = 0;
+      for (const cls of CLASS_CYCLE) {
+        if (round < b[cls].length) { list.push(b[cls][round]); added++; }
+      }
+      if (added === 0) break;
+    }
+    out.set(carrier, list);
+  }
+  return out;
+}
+
+/**
+ * 按「每轮每个载体各取 1 条」平分预算。
+ *
+ * 这一步的存在理由是历史踩坑：最初按族轮转，每个族取第 k 个候选，
+ * 结果任何被追加到族尾部的载体（如 feast 在第 7 位）永远轮不到。
+ * 改成载体优先级后，每个载体每轮各取 1 条，先保证人人有份，
+ * 候选少的载体提前耗尽，剩余名额自动回流给其它载体。
+ */
+function pickFair(byCarrier, target, label) {
   const order = [...byCarrier.keys()];
   const out = [];
-  let round = 0;
-  while (out.length < target) {
+  for (let round = 0; out.length < target; round++) {
     let added = 0;
     for (const c of order) {
       if (out.length >= target) break;
@@ -432,9 +626,17 @@ function roundRobin(families, target) {
       if (round < list.length) { out.push(list[round]); added++; }
     }
     if (added === 0) break; // 所有载体的候选都取完了
-    round++;
   }
+  assert(out.length === target,
+    `${label}候选不足：只铺了 ${out.length} 条，目标 ${target}（请增加族或载体）`);
   return out;
+}
+
+function attrClass(family, elements) {
+  if (elements) return 'ELEM';
+  if (SIG_ATTR.has(family)) return 'SIG';
+  if (SUP_ATTR.has(family)) return 'SUP';
+  return 'BASE';
 }
 
 function expandAttributes() {
@@ -460,12 +662,9 @@ function expandAttributes() {
         }));
       }
     }
-    return { family, candidates };
+    return { family, candidates, cls: attrClass(family, elements) };
   });
-  const picked = roundRobin(families, TARGET_ATTRIBUTE);
-  assert(picked.length === TARGET_ATTRIBUTE,
-    `属性候选不足：只有 ${picked.length} 条，目标 ${TARGET_ATTRIBUTE}（请增加族或载体）`);
-  return picked;
+  return pickFair(stratify(families), TARGET_ATTRIBUTE, '属性');
 }
 
 function expandEffects() {
@@ -495,12 +694,15 @@ function expandEffects() {
         candidates.push(affix);
       }
     }
-    return { family, candidates };
+    return {
+      family,
+      candidates,
+      // 效果层没有元素维度（元素限定写在 element_allow 上，不是整族展开），
+      // 所以只需分 BASE / SIG 两类
+      cls: BASE_EFFECTS.has(family) ? 'BASE' : 'SIG',
+    };
   });
-  const picked = roundRobin(families, TARGET_EFFECT);
-  assert(picked.length === TARGET_EFFECT,
-    `效果候选不足：只有 ${picked.length} 条，目标 ${TARGET_EFFECT}`);
-  return picked;
+  return pickFair(stratify(families), TARGET_EFFECT, '效果');
 }
 
 function makeAffix({ id, family, name, unit, base, precision, carrier, element, layer }) {
@@ -534,7 +736,16 @@ function expandCarriers() {
   // 载体层必须有品质档，否则预算表塌了：
   // 如果只有属性层和效果层带品质，4 层全红最多 7×2 = 14 点，
   // 「17–28 点 = 传说」这一档永远达不到，传说级会变成不可达稀有度。
-  // 载体品质 = 做工（基础属性倍率），元素品质 = 元素浓度。
+  //
+  // 载体品质的语义按类型分开叫名字：装备是「做工」（基础属性倍率），
+  // 消耗品是「品级」（效果强度倍率），召唤物是「血统」（召唤强度倍率）。
+  // 三者在数值上完全一致，只是文案对齐各自的造物逻辑 ——
+  // 玩家看到「血统 +5%」不会疑惑这与召出来的东西有什么关系。
+  const QUALITY_LABEL = {
+    EQUIPMENT: '做工',
+    CONSUMABLE: '品级',
+    SUMMON: '血统',
+  };
   return CARRIERS.map(([id, name, type]) => ({
     id: `carrier.${id}`,
     family: `carrier.${id}`,
@@ -547,7 +758,7 @@ function expandCarriers() {
     excludes: [],
     weight: 100,
     appearance_key: `model.${id}`,
-    tiers: buildTiers(5, 0, '%', '基础属性', type, id),
+    tiers: buildTiers(5, 0, '%', QUALITY_LABEL[type], type, id),
   }));
 }
 
@@ -637,6 +848,52 @@ function buildSynergy(attributes, effects) {
     ['effect.fireResist', 'effect.shield', 'SYNERGY', 0.10, '抗性转护盾 +10%'],
     ['effect.magnet', 'effect.combo', 'CONFLICT', -0.10, '连击判定 −10%（拾取打断节奏）'],
     ['attr.summonElement', 'effect.summonEnrage', 'SYNERGY', 0.15, '狂暴期元素伤害 +15%'],
+
+    // --- 新增载体的「招牌联动」---
+    // 每个新载体至少一条：玩家第一次用这个载体时，就该撞上一个读得懂的化学效应。
+    // 否则新载体只是「换了个模型」，构筑深度没有增加。
+    ['carrier.dagger', 'attr.backstab', 'SYNERGY', 0.15, '背刺伤害 +15%'],
+    ['carrier.dagger', 'effect.bleed', 'SYNERGY', 0.20, '流血伤害 +20%'],
+    ['carrier.hammer', 'effect.shatter', 'SYNERGY', 0.20, '碎甲效果 +20%'],
+    ['carrier.hammer', 'effect.stun', 'CONFLICT', -0.10, '眩晕概率 −10%（重锤自带硬直，重复投入收益递减）'],
+    ['carrier.spear', 'effect.pierceLine', 'SYNERGY', 0.25, '贯穿距离 +25%'],
+    ['carrier.spear', 'effect.impale', 'SYNERGY', 0.20, '钉刺定身 +20%'],
+    ['carrier.shield', 'effect.bulwark', 'SYNERGY', 0.25, '壁垒护盾 +25%'],
+    ['carrier.shield', 'effect.riposte', 'SYNERGY', 0.20, '还击伤害 +20%'],
+    ['carrier.crossbow', 'effect.volley', 'SYNERGY', 1, '齐射箭数 +1'],
+    ['carrier.crossbow', 'effect.steady', 'SYNERGY', 0.20, '定装增伤 +20%'],
+    ['carrier.gauntlet', 'effect.flurry', 'SYNERGY', 1, '连打段数 +1'],
+    ['carrier.gauntlet', 'effect.ironFist', 'SYNERGY', 0.25, '铁拳伤害 +25%'],
+
+    ['carrier.undead', 'effect.bonePile', 'SYNERGY', 0.20, '骨堆再生率 +20%'],
+    ['carrier.undead', 'effect.soulHarvest', 'SYNERGY', 0.20, '收魂回复 +20%'],
+    ['carrier.bird', 'effect.dive', 'SYNERGY', 0.25, '俯冲伤害 +25%'],
+    ['carrier.bird', 'effect.scout', 'SYNERGY', 4, '侦察半径 +4'],
+    ['carrier.treant', 'effect.rootSnare', 'SYNERGY', 1, '缠绕时长 +1s'],
+    ['carrier.treant', 'effect.photosynth', 'SYNERGY', 0.20, '光合回复 +20%'],
+    ['carrier.totem', 'effect.wardAura', 'SYNERGY', 0.20, '守护光环强度 +20%'],
+    ['carrier.totem', 'effect.pulse', 'SYNERGY', 0.20, '脉冲频率 +20%'],
+    ['carrier.wisp', 'effect.mend', 'SYNERGY', 0.20, '愈合量 +20%'],
+    ['carrier.wisp', 'effect.holyLight', 'SYNERGY', 0.20, '圣光强度 +20%'],
+    ['carrier.serpent', 'effect.venom', 'SYNERGY', 2, '中毒层数 +2'],
+    ['carrier.serpent', 'effect.constrict', 'SYNERGY', 0.20, '绞缠强度 +20%'],
+
+    ['carrier.flask', 'effect.splash', 'SYNERGY', 0.25, '泼溅半径 +25%'],
+    ['carrier.flask', 'effect.volatile', 'SYNERGY', 0.20, '挥发持续 +20%'],
+    ['carrier.rune', 'effect.inscribe', 'SYNERGY', 0.25, '铭刻强度 +25%'],
+    ['carrier.rune', 'effect.trap', 'SYNERGY', 0.20, '陷阱触发范围 +20%'],
+    ['carrier.mushroom', 'effect.spore', 'SYNERGY', 0.20, '孢子扩散 +20%'],
+    ['carrier.censer', 'effect.incense', 'SYNERGY', 0.20, '熏香回复 +20%'],
+    ['carrier.seed', 'effect.sprout', 'SYNERGY', 0.25, '萌芽成活率 +25%'],
+    ['carrier.seed', 'effect.harvest', 'SYNERGY', 0.15, '采收产出 +15%'],
+
+    // --- 新增属性 × 新增效果的跨层联动 ---
+    ['attr.auraPower', 'effect.pulse', 'SYNERGY', 0.15, '脉冲强度 +15%'],
+    ['attr.healPower', 'effect.mend', 'SYNERGY', 0.15, '愈合量 +15%'],
+    ['attr.poisonPotency', 'effect.venom', 'SYNERGY', 0.15, '毒性强度 +15%'],
+    ['attr.blockPower', 'effect.bulwark', 'SYNERGY', 0.20, '壁垒厚度 +20%'],
+    ['attr.reach', 'effect.pierceLine', 'SYNERGY', 0.20, '贯穿距离 +20%'],
+    ['attr.comboStage', 'effect.flurry', 'SYNERGY', 1, '连打段数 +1'],
   ];
 
   for (const [from, to, type, delta, desc] of curated) {
@@ -748,10 +1005,14 @@ function main() {
   const curated = links.filter((l) => l.source === 'CURATED').length;
   console.log(`协同合计：${links.length}（手工 ${curated} / 派生 ${links.length - curated}）`);
 
-  assert(total === 450, `词条总数应为 450，实际 ${total}`);
-  // 协同定为 155 而不是原计划的 200：矩阵派生与手工表去重后有 45 条撞车，
-  // 硬凑 200 只能靠加冗余组合。155 是真实成立的组合数，不灌水。
-  assert(links.length === 155, `协同应为 155 条（去重后），实际 ${links.length}`);
+  // 词条预算：属性 700 + 效果 380 + 载体 35 + 元素 9 = 1124
+  // 这个数是「铺设预算」而不是「上限」：候选总数比它多，pickFair 按载体平分，
+  // 保证每个载体的属性池 ≥ 19 条、效果池 ≥ 10 条，远高于「抽 5 张不重复」的下限。
+  const expectTotal = TARGET_ATTRIBUTE + TARGET_EFFECT + carriers.length + elements.length;
+  assert(total === expectTotal, `词条总数应为 ${expectTotal}，实际 ${total}`);
+  // 协同数：手工 100 条 + 派生矩阵去重后的结果。硬凑整数只能靠加冗余组合，
+  // 所以这里锁的是「实测成立的对数」，而不是一个好看的圆整数。
+  assert(links.length === 193, `协同应为 193 条（去重后），实际 ${links.length}`);
   console.log('✓ 目标数量达标');
 }
 

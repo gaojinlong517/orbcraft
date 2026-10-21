@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "2.0.0",
   "links": [
     {
       "from": "elem.lightning",
@@ -479,6 +479,310 @@
       "type": "SYNERGY",
       "delta": 0.15,
       "desc": "狂暴期元素伤害 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.dagger",
+      "to": "attr.backstab",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "背刺伤害 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.dagger",
+      "to": "effect.bleed",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "流血伤害 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.hammer",
+      "to": "effect.shatter",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "碎甲效果 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.hammer",
+      "to": "effect.stun",
+      "type": "CONFLICT",
+      "delta": -0.1,
+      "desc": "眩晕概率 −10%（重锤自带硬直，重复投入收益递减）",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.spear",
+      "to": "effect.pierceLine",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "贯穿距离 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.spear",
+      "to": "effect.impale",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "钉刺定身 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.shield",
+      "to": "effect.bulwark",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "壁垒护盾 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.shield",
+      "to": "effect.riposte",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "还击伤害 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.crossbow",
+      "to": "effect.volley",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "齐射箭数 +1",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.crossbow",
+      "to": "effect.steady",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "定装增伤 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.gauntlet",
+      "to": "effect.flurry",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "连打段数 +1",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.gauntlet",
+      "to": "effect.ironFist",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "铁拳伤害 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.undead",
+      "to": "effect.bonePile",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "骨堆再生率 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.undead",
+      "to": "effect.soulHarvest",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "收魂回复 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.bird",
+      "to": "effect.dive",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "俯冲伤害 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.bird",
+      "to": "effect.scout",
+      "type": "SYNERGY",
+      "delta": 4,
+      "desc": "侦察半径 +4",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.treant",
+      "to": "effect.rootSnare",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "缠绕时长 +1s",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.treant",
+      "to": "effect.photosynth",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "光合回复 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.totem",
+      "to": "effect.wardAura",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "守护光环强度 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.totem",
+      "to": "effect.pulse",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "脉冲频率 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.wisp",
+      "to": "effect.mend",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "愈合量 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.wisp",
+      "to": "effect.holyLight",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "圣光强度 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.serpent",
+      "to": "effect.venom",
+      "type": "SYNERGY",
+      "delta": 2,
+      "desc": "中毒层数 +2",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.serpent",
+      "to": "effect.constrict",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "绞缠强度 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.flask",
+      "to": "effect.splash",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "泼溅半径 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.flask",
+      "to": "effect.volatile",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "挥发持续 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.rune",
+      "to": "effect.inscribe",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "铭刻强度 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.rune",
+      "to": "effect.trap",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "陷阱触发范围 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.mushroom",
+      "to": "effect.spore",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "孢子扩散 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.censer",
+      "to": "effect.incense",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "熏香回复 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.seed",
+      "to": "effect.sprout",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "萌芽成活率 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "carrier.seed",
+      "to": "effect.harvest",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "采收产出 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.auraPower",
+      "to": "effect.pulse",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "脉冲强度 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.healPower",
+      "to": "effect.mend",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "愈合量 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.poisonPotency",
+      "to": "effect.venom",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "毒性强度 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.blockPower",
+      "to": "effect.bulwark",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "壁垒厚度 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.reach",
+      "to": "effect.pierceLine",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "贯穿距离 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.comboStage",
+      "to": "effect.flurry",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "连打段数 +1",
       "source": "CURATED"
     },
     {

@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "2.0.0",
   "cards": [
     {
       "id": "target.carrier.gun",
@@ -50,6 +50,54 @@
       "base_type": "EQUIPMENT"
     },
     {
+      "id": "target.carrier.dagger",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.dagger",
+      "quality_floor": "NONE",
+      "name": "定向·匕首",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.hammer",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.hammer",
+      "quality_floor": "NONE",
+      "name": "定向·重锤",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.spear",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.spear",
+      "quality_floor": "NONE",
+      "name": "定向·长矛",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.shield",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.shield",
+      "quality_floor": "NONE",
+      "name": "定向·盾",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.crossbow",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.crossbow",
+      "quality_floor": "NONE",
+      "name": "定向·弩",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.gauntlet",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.gauntlet",
+      "quality_floor": "NONE",
+      "name": "定向·拳套",
+      "base_type": "EQUIPMENT"
+    },
+    {
       "id": "target.carrier.apple",
       "target_layer": "CARRIER",
       "target_affix": "carrier.apple",
@@ -87,6 +135,46 @@
       "target_affix": "carrier.feast",
       "quality_floor": "NONE",
       "name": "定向·盛宴",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.flask",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.flask",
+      "quality_floor": "NONE",
+      "name": "定向·烧瓶",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.rune",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.rune",
+      "quality_floor": "NONE",
+      "name": "定向·符文",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.mushroom",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.mushroom",
+      "quality_floor": "NONE",
+      "name": "定向·蘑菇",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.censer",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.censer",
+      "quality_floor": "NONE",
+      "name": "定向·香炉",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.seed",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.seed",
+      "quality_floor": "NONE",
+      "name": "定向·种子",
       "base_type": "CONSUMABLE"
     },
     {
@@ -143,6 +231,54 @@
       "target_affix": "carrier.crystal",
       "quality_floor": "NONE",
       "name": "定向·晶簇",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.undead",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.undead",
+      "quality_floor": "NONE",
+      "name": "定向·骸骨",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.bird",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.bird",
+      "quality_floor": "NONE",
+      "name": "定向·猎鹰",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.treant",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.treant",
+      "quality_floor": "NONE",
+      "name": "定向·树人",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.totem",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.totem",
+      "quality_floor": "NONE",
+      "name": "定向·图腾",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.wisp",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.wisp",
+      "quality_floor": "NONE",
+      "name": "定向·光灵",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.serpent",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.serpent",
+      "quality_floor": "NONE",
+      "name": "定向·巨蛇",
       "base_type": "SUMMON"
     },
     {

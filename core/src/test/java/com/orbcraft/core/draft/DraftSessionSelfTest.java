@@ -13,8 +13,8 @@ import java.util.Map;
 /**
  * 抽卡状态机自测 —— 直接用真实卡表跑，不用假数据。
  *
- * <p>用假数据测只能证明「代码逻辑自洽」，证明不了「这 450 条表能用」。
- * 这里有一个关键设计：**所有用例都跑同一份 450 条卡表**，
+ * <p>用假数据测只能证明「代码逻辑自洽」，证明不了「这 1124 条表能用」。
+ * 这里有一个关键设计：**所有用例都跑同一份 1124 条卡表**，
  * 因为池子抽空、定向卡目标被过滤、预算全灰这类问题只有真数据才会暴露。
  *
  * <p>运行：{@code java -cp <out> com.orbcraft.core.draft.DraftSessionSelfTest [dataDir]}
@@ -60,12 +60,12 @@ public final class DraftSessionSelfTest {
                 read("affixes.effect.json"));
         targets = AffixData.readTargetCards(read("target_cards.json"));
 
-        check("总词条 450 条", table.size() == 450, "实际 " + table.size());
-        check("载体 18", table.size(Layer.CARRIER) == 18, "实际 " + table.size(Layer.CARRIER));
+        check("总词条 1124 条", table.size() == 1124, "实际 " + table.size());
+        check("载体 35", table.size(Layer.CARRIER) == 35, "实际 " + table.size(Layer.CARRIER));
         check("元素 9", table.size(Layer.ELEMENT) == 9, "实际 " + table.size(Layer.ELEMENT));
-        check("属性 243", table.size(Layer.ATTRIBUTE) == 243, "实际 " + table.size(Layer.ATTRIBUTE));
-        check("效果 180", table.size(Layer.EFFECT) == 180, "实际 " + table.size(Layer.EFFECT));
-        check("定向卡 27 张", targets.size() == 27, "实际 " + targets.size());
+        check("属性 700", table.size(Layer.ATTRIBUTE) == 700, "实际 " + table.size(Layer.ATTRIBUTE));
+        check("效果 380", table.size(Layer.EFFECT) == 380, "实际 " + table.size(Layer.EFFECT));
+        check("定向卡 44 张", targets.size() == 44, "实际 " + targets.size());
 
         // 每层族数必须够发 5 张不重复的牌
         for (Layer l : Layer.values()) {

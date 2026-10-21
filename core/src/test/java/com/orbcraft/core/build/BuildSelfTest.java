@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 构筑流程自测 —— 用真实 450 条卡表跑，不用假数据。
+ * 构筑流程自测 —— 用真实 1124 条卡表跑，不用假数据。
  *
  * <p>重点不是「能不能走完」，而是三件容易在重构里悄悄丢掉的事：
  * <ol>
@@ -84,7 +84,7 @@ public final class BuildSelfTest {
                 read("affixes.effect.json"));
         config = BuildConfig.defaults();
 
-        check("总词条 450 条", table.size() == 450, "实际 " + table.size());
+        check("总词条 1124 条", table.size() == 1124, "实际 " + table.size());
         check("默认配置：描述发 5 选 2", config.descDealCount() == 5 && config.descPickCount() == 2,
                 config.descDealCount() + "/" + config.descPickCount());
         check("默认配置：效果发 5 选 1", config.effectDealCount() == 5 && config.effectPickCount() == 1,
