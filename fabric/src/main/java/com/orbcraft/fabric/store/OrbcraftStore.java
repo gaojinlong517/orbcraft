@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -73,6 +73,16 @@ public final class OrbcraftStore implements PlayerStore {
     /** 定时落盘间隔。5 分钟远小于一次崩溃可能丢的进度，也远大于一次写盘的开销。 */
     public static final int SAVE_INTERVAL_TICKS = 20 * 60 * 5;
 
+    /**
+     * 脏玩家刷盘间隔（5 秒）。
+     *
+     * <p>为什么是「攒一会儿批量写」而不是「标脏就写」或「等 5 分钟」：一次构筑会连着改
+     * 好几次状态（定向卡 → submit → 发球），标脏就写等于把三次同步 IO 压进命令回调；
+     * 而拖到 5 分钟的定时保存，崩服时就会丢掉刚刚扣掉的配额和刚建的票。5 秒是两者的折中，
+     * 也让同一秒内的多次变更合并成一次写。
+     */
+    public static final int DIRTY_FLUSH_INTERVAL_TICKS = 20 * 5;
+
     /** 定向账本保留天数。每类每日额度不在这里 —— 那是 {@code OrbcraftRuntime} 的数值。 */
     public static final int TARGETS_RETENTION_DAYS = TargetAllowance.DEFAULT_RETENTION_DAYS;
 
@@ -85,9 +95,13 @@ public final class OrbcraftStore implements PlayerStore {
     private final Map<String, Session> sessions = new HashMap<>();
     private final Set<String> hatchRestored = new LinkedHashSet<>();
 
+    /** 已变更、等待下一次 {@link #DIRTY_FLUSH_INTERVAL_TICKS} 落盘的玩家。 */
+    private final Set<String> dirty = new LinkedHashSet<>();
+
     private volatile MinecraftServer server;
     private volatile Path playersDir;
     private int lastSaveServerTick;
+    private int lastDirtyFlushTick;
     private boolean registered;
 
     private OrbcraftStore() {
@@ -171,22 +185,26 @@ public final class OrbcraftStore implements PlayerStore {
         synchronized (this) {
             sessions.clear();
             hatchRestored.clear();
-            // 注意：孵化服务是 main 的 OrbcraftRuntime 持有的单例，本类无权也没有办法清空它。
-            // 同一 JVM 里换存档（单人退出再进另一个世界）时，上一局的票据会留在那份单例里，
-            // 这时 restore 会撞「票据 id 重复」并被下面的 catch 记为错误 —— 这是 runtime 的
-            // 生命周期决定，不在这里绕（绕过等于自己造第二份状态）。
+            dirty.clear();
             lastSaveServerTick = srv.getTickCount();
+            lastDirtyFlushTick = srv.getTickCount();
         }
-        OrbcraftMod.LOG.info("[orbcraft] 玩家存档目录 {}（定时保存每 {} tick）", dir, SAVE_INTERVAL_TICKS);
+        OrbcraftMod.LOG.info("[orbcraft] 玩家存档目录 {}（定时保存每 {} tick，脏数据每 {} tick 刷一次）",
+                dir, SAVE_INTERVAL_TICKS, DIRTY_FLUSH_INTERVAL_TICKS);
     }
 
     private void onServerStopping(MinecraftServer srv) {
+        flushDirty(srv);
         flushOnline(srv);
         OrbcraftMod.LOG.info("[orbcraft] 关服前已写回在线玩家存档");
     }
 
     private void onEndTick(MinecraftServer srv) {
         int now = srv.getTickCount();
+        if (now - lastDirtyFlushTick >= DIRTY_FLUSH_INTERVAL_TICKS) {
+            lastDirtyFlushTick = now;
+            flushDirty(srv);
+        }
         if (now - lastSaveServerTick < SAVE_INTERVAL_TICKS) {
             return;
         }
@@ -200,6 +218,7 @@ public final class OrbcraftStore implements PlayerStore {
 
     private void onDisconnect(ServerPlayer player) {
         // 退出是最后一次能拿到完整现场的时刻；等关服再统一写会漏掉「退出后、关服前」这段。
+        // 这里同步写是故意的：玩家已经走了，卡的不是主线程上正在跑的玩法逻辑。
         saveNow(player.getUUID());
     }
 
@@ -207,6 +226,28 @@ public final class OrbcraftStore implements PlayerStore {
         long now = OrbcraftRuntime.nowTick(srv);
         for (ServerPlayer player : srv.getPlayerList().getPlayers()) {
             String key = PlayerStore.ownerKeyOf(player.getUUID());
+            writeSession(key, now);
+        }
+    }
+
+    /**
+     * 把攒下的脏玩家刷盘。
+     *
+     * <p>批量 + 短周期（{@link #DIRTY_FLUSH_INTERVAL_TICKS}）而不是「标脏就写」：
+     * 一次构筑会连着改好几次状态（定向卡、submit、发球），每次都同步写盘等于把 IO
+     * 压进命令回调里；而拖到 5 分钟的定时保存又会在崩服时丢掉刚刚扣掉的配额。
+     */
+    private void flushDirty(MinecraftServer srv) {
+        List<String> keys;
+        synchronized (this) {
+            if (dirty.isEmpty()) {
+                return;
+            }
+            keys = new ArrayList<>(dirty);
+            dirty.clear();
+        }
+        long now = OrbcraftRuntime.nowTick(srv);
+        for (String key : keys) {
             writeSession(key, now);
         }
     }
@@ -246,8 +287,9 @@ public final class OrbcraftStore implements PlayerStore {
     }
 
     private void restoreHatch(String key, HatchSnapshot snapshot) {
+        HatchSnapshot filtered = withoutTicketsAlreadyInMemory(snapshot);
         try {
-            IncubationService.RestoreResult result = hatch().restore(snapshot);
+            IncubationService.RestoreResult result = hatch().restore(filtered);
             if (result.quotaRepaired()) {
                 OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 的存档不自洽：存盘配额低于在途票据所需，"
                                 + "已按票据修复（quotaRepaired=true，生效配额 {}）。"
@@ -261,6 +303,32 @@ public final class OrbcraftStore implements PlayerStore {
             // 恢复失败不能挡住登录：玩家的球这次读不出来，但至少能进服。
             OrbcraftMod.LOG.error("[orbcraft] 玩家 {} 的孵化断面无法恢复，已跳过：{}", key, e.getMessage());
         }
+    }
+
+    /**
+     * 去掉「服务里已经有一张同 id 的票」的那些。
+     *
+     * <p>{@code IncubationService} 没有移除票据的接口，{@code restore} 撞到重复 id 会直接抛，
+     * 而这条路径在登录事件里 —— 抛出去就是玩家进不了服。重复只可能来自两种情况：
+     * 同一进程内重登（票本来还在内存里，而且可能已经从 CHARGING 走到 READY），
+     * 或同一 JVM 换了存档。两种都以<b>内存里的版本为准</b>：那只球还在玩家手里／世界里，
+     * 存档里的只是它上一次落盘时的样子。
+     */
+    private HatchSnapshot withoutTicketsAlreadyInMemory(HatchSnapshot snapshot) {
+        List<HatchTicket> keep = new ArrayList<>(snapshot.tickets().size());
+        for (HatchTicket ticket : snapshot.tickets()) {
+            if (hatch().ticket(ticket.ticketId()).isPresent()) {
+                continue;
+            }
+            keep.add(ticket);
+        }
+        if (keep.size() == snapshot.tickets().size()) {
+            return snapshot;
+        }
+        OrbcraftMod.LOG.warn("[orbcraft] 玩家 {} 有 {} 张票已在内存里（重登或换存档），按内存版本为准，"
+                        + "只用存档恢复其余 {} 张",
+                snapshot.ownerKey(), snapshot.tickets().size() - keep.size(), keep.size());
+        return new HatchSnapshot(snapshot.ownerKey(), snapshot.quota(), keep);
     }
 
     /** 把存档里的定向账本装进 runtime。装不上就保持 runtime 里的现值并留日志。 */
@@ -531,11 +599,13 @@ public final class OrbcraftStore implements PlayerStore {
     }
 
     /**
-     * 用掉一次定向卡额度，把新账本装进 runtime，并立即落盘。
+     * 用掉一次定向卡额度，把新账本装进 runtime，并<b>标脏</b>等待落盘。
      *
      * <p><b>S2 请走这个方法，不要自己调 {@code TargetAllowance.use}。</b>
      * {@code use} 返回新实例、不改原实例是设计；谁忘了把新实例 {@code installAllowance}
-     * 存回去，这次操作就等于没发生。这里一次性把「扣减 + 装回 + 落盘」做完。
+     * 存回去，这次操作就等于没发生。这里一次性把「扣减 + 装回 + 标脏」做完。
+     *
+     * <p>不在这里同步写盘：它会从命令回调里被调用，而写盘是几十毫秒级的阻塞 IO。
      *
      * @return 额度不足时 {@link Optional#empty()}（不抛异常，这是玩法分支）
      */
@@ -544,19 +614,52 @@ public final class OrbcraftStore implements PlayerStore {
             Optional<TargetAllowance> next = OrbcraftRuntime.allowanceOf(ownerKey).use(ownerKey, epochDay, kind);
             next.ifPresent(value -> {
                 OrbcraftRuntime.installAllowance(ownerKey, value);
-                // 额度是既成事实：等 5 分钟定时保存，玩家在这期间崩服就等于白拿一次。
-                INSTANCE.saveSession(ownerKey);
+                // 额度是既成事实：只等 5 秒批量刷盘，不会等到下一次 5 分钟定时保存。
+                INSTANCE.markDirtyLocked(ownerKey);
             });
             return next;
         }
     }
 
-    /** 日历天序号，给 {@link #useTarget} 用。用真实日期而不是游戏内天数：跨天归零更符合「每日额度」。 */
+    /**
+     * 日历天序号，给 {@link #useTarget} 用。
+     *
+     * <p><b>用服务器本地时区，不是 UTC。</b> 日期边界必须和玩家的作息对齐：按 UTC 算，
+     * 东八区的额度刷新点落在早上 8 点 —— 玩家熬到 8 点就能白拿一次当天额度，而
+     * 「今天」在玩家眼里和服务器眼里也不是同一天。改成系统时区后刷新点落在本地零点。
+     */
     public static long todayEpochDay() {
-        return LocalDate.now(ZoneOffset.UTC).toEpochDay();
+        return LocalDate.now(ZoneId.systemDefault()).toEpochDay();
     }
 
-    /** 关键状态变更后（submit / deploy / 用掉定向卡）立刻落盘。服务端未就绪时静默跳过。 */
+    /**
+     * 标记某人的状态已变更，尽快落盘（submit / deploy / 定向卡使用后调用）。
+     *
+     * <p><b>不是「马上写」</b>：这个方法会在命令回调与事件里被调用，同步 IO 会卡主线程。
+     * 它只把 ownerKey 记进待保存集合，由 {@code END_SERVER_TICK} 每
+     * {@link #DIRTY_FLUSH_INTERVAL_TICKS} 批量刷一次；关服与退出时也会刷。
+     *
+     * <p>S2 走这个而不是 {@link #saveNow}：后者是同步写，只留给「下线」这种一次性时刻。
+     *
+     * @throws IllegalArgumentException {@code ownerKey} 为空（调用方自己拼了键，是 bug）
+     */
+    public static void markDirty(String ownerKey) {
+        if (ownerKey == null || ownerKey.isBlank()) {
+            throw new IllegalArgumentException("ownerKey 不能为空：它是所有账本的键");
+        }
+        synchronized (INSTANCE) {
+            INSTANCE.markDirtyLocked(ownerKey);
+        }
+    }
+
+    private void markDirtyLocked(String ownerKey) {
+        dirty.add(ownerKey);
+    }
+
+    /**
+     * 立刻同步落盘。只给「下线」这种一次性时刻用；玩法路径请用 {@link #markDirty}。
+     * 服务端未就绪时静默跳过。
+     */
     public static void saveNow(UUID playerId) {
         String key = PlayerStore.ownerKeyOf(playerId);
         synchronized (INSTANCE) {
