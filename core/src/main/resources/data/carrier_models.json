@@ -1,0 +1,321 @@
+{
+  "version": "1.0.0",
+  "note": "载体 → 模型映射。model_id 必须等于 affixes.carrier.json 中该载体的 appearance_key；proxy_entity 仅作无自定义模型时的原版兜底外观；asset=NEW 的条目不进 ModelCatalog，运行时会被 CatalogGuardBackend 拒绝并降级为 NAMED_VANILLA。",
+  "carriers": [
+    {
+      "carrier_id": "gun",
+      "model_id": "model.gun",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack", "special"],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "枪械无原版对应模型，item_display 可承载单手持握骨架与后坐动画。"
+    },
+    {
+      "carrier_id": "sword",
+      "model_id": "model.sword",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "原版剑物品模型可直接复用，挥砍由骨架动画驱动。"
+    },
+    {
+      "carrier_id": "bow",
+      "model_id": "model.bow",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack", "special"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "复用原版弓与拉弦帧，special 表达蓄力。"
+    },
+    {
+      "carrier_id": "axe",
+      "model_id": "model.axe",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "原版斧物品模型已具备斧刃与握柄，可直接复用。"
+    },
+    {
+      "carrier_id": "staff",
+      "model_id": "model.staff",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack", "special"],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "法杖无原版对应，需新建带施法光点挂点的长杆模型。"
+    },
+    {
+      "carrier_id": "armor",
+      "model_id": "model.armor",
+      "proxy_entity": "minecraft:armor_stand",
+      "animations": ["idle", "walk"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "盔甲架穿上原版护甲即可完整还原穿戴外观。"
+    },
+    {
+      "carrier_id": "dagger",
+      "model_id": "model.dagger",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack"],
+      "tintable": true,
+      "asset": "REPLACE",
+      "note": "以原版剑模型缩短刀身并重贴图为短刃。"
+    },
+    {
+      "carrier_id": "hammer",
+      "model_id": "model.hammer",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack"],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "重锤无原版对应，需新建带惯性拖尾的重型锤头模型。"
+    },
+    {
+      "carrier_id": "spear",
+      "model_id": "model.spear",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack", "special"],
+      "tintable": true,
+      "asset": "REPLACE",
+      "note": "以原版三叉戟模型拉长杆身重贴图，special 为突刺。"
+    },
+    {
+      "carrier_id": "shield",
+      "model_id": "model.shield",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "原版盾牌模型复用，格挡为单一静态姿态。"
+    },
+    {
+      "carrier_id": "crossbow",
+      "model_id": "model.crossbow",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack", "special"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "原版弩自带上弦与发射两套姿态，直接复用。"
+    },
+    {
+      "carrier_id": "gauntlet",
+      "model_id": "model.gauntlet",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "attack"],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "拳套无原版对应，需新建包住前臂的分指模型。"
+    },
+    {
+      "carrier_id": "apple",
+      "model_id": "model.apple",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle"],
+      "tintable": false,
+      "asset": "REUSE",
+      "note": "直接复用原版苹果物品模型，无需额外美术。"
+    },
+    {
+      "carrier_id": "potion",
+      "model_id": "model.potion",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "special"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "复用原版药水瓶模型，液体颜色交给 tint 表达。"
+    },
+    {
+      "carrier_id": "scroll",
+      "model_id": "model.scroll",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "special"],
+      "tintable": false,
+      "asset": "NEW",
+      "note": "卷轴无原版物品模型，需新建展卷动画。"
+    },
+    {
+      "carrier_id": "bomb",
+      "model_id": "model.bomb",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "special"],
+      "tintable": false,
+      "asset": "REPLACE",
+      "note": "以原版 TNT 方块模型重贴图为球状炸弹。"
+    },
+    {
+      "carrier_id": "feast",
+      "model_id": "model.feast",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "special"],
+      "tintable": false,
+      "asset": "REPLACE",
+      "note": "以原版蛋糕模型为基础重贴图为满桌盛宴。"
+    },
+    {
+      "carrier_id": "flask",
+      "model_id": "model.flask",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "special"],
+      "tintable": true,
+      "asset": "REPLACE",
+      "note": "以药水瓶模型重贴图为宽口烧瓶，瓶身可染色。"
+    },
+    {
+      "carrier_id": "rune",
+      "model_id": "model.rune",
+      "proxy_entity": "minecraft:item_display",
+      "animations": [],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "静态符文石板，无需动画帧，只需一张发光贴图。"
+    },
+    {
+      "carrier_id": "mushroom",
+      "model_id": "model.mushroom",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle"],
+      "tintable": false,
+      "asset": "REUSE",
+      "note": "直接复用原版蘑菇物品模型，无需额外美术。"
+    },
+    {
+      "carrier_id": "censer",
+      "model_id": "model.censer",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle", "special"],
+      "tintable": false,
+      "asset": "NEW",
+      "note": "香炉无原版对应，需新建带摆动链条与烟口的模型。"
+    },
+    {
+      "carrier_id": "seed",
+      "model_id": "model.seed",
+      "proxy_entity": "minecraft:item_display",
+      "animations": ["idle"],
+      "tintable": false,
+      "asset": "REUSE",
+      "note": "直接复用原版种子物品模型，无需额外美术。"
+    },
+    {
+      "carrier_id": "dragon",
+      "model_id": "model.dragon",
+      "proxy_entity": "minecraft:ender_dragon",
+      "animations": ["idle", "walk", "attack", "death", "special"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "末影龙自带飞行扑翼与攻击骨架，是巨龙最接近的兜底外观。"
+    },
+    {
+      "carrier_id": "beast",
+      "model_id": "model.beast",
+      "proxy_entity": "minecraft:ravager",
+      "animations": ["idle", "walk", "attack", "death"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "劫掠兽的体型与四足冲撞步态贴合巨兽。"
+    },
+    {
+      "carrier_id": "spirit",
+      "model_id": "model.spirit",
+      "proxy_entity": "minecraft:allay",
+      "animations": ["idle", "walk", "special"],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "精灵需新建半透明漂浮模型，悦灵仅作无资源时的可见兜底。"
+    },
+    {
+      "carrier_id": "golem",
+      "model_id": "model.golem",
+      "proxy_entity": "minecraft:iron_golem",
+      "animations": ["idle", "walk", "attack", "death"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "铁傀儡骨架即傀儡的标准形态，兜底即可辨认。"
+    },
+    {
+      "carrier_id": "wraith",
+      "model_id": "model.wraith",
+      "proxy_entity": "minecraft:vex",
+      "animations": ["idle", "walk", "attack", "special"],
+      "tintable": true,
+      "asset": "REPLACE",
+      "note": "恼鬼的悬浮飞行姿态贴合幽灵，重贴图为半透明布状躯体。"
+    },
+    {
+      "carrier_id": "swarm",
+      "model_id": "model.swarm",
+      "proxy_entity": "minecraft:silverfish",
+      "animations": ["idle", "walk", "attack", "death"],
+      "tintable": false,
+      "asset": "REUSE",
+      "note": "蠹虫是最小虫群单位，多只叠加即可表达虫群。"
+    },
+    {
+      "carrier_id": "crystal",
+      "model_id": "model.crystal",
+      "proxy_entity": "minecraft:end_crystal",
+      "animations": [],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "静态晶簇直接复用末影水晶，无需动画帧。"
+    },
+    {
+      "carrier_id": "undead",
+      "model_id": "model.undead",
+      "proxy_entity": "minecraft:skeleton",
+      "animations": ["idle", "walk", "attack", "death"],
+      "tintable": false,
+      "asset": "REUSE",
+      "note": "骷髅骨架即骸骨召唤物的最小可用外观。"
+    },
+    {
+      "carrier_id": "bird",
+      "model_id": "model.bird",
+      "proxy_entity": "minecraft:parrot",
+      "animations": ["idle", "walk", "death", "special"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "鹦鹉是原版现成的小型飞行生物，飞行与振翅姿态可复用。"
+    },
+    {
+      "carrier_id": "treant",
+      "model_id": "model.treant",
+      "proxy_entity": "minecraft:warden",
+      "animations": ["idle", "walk", "attack", "death"],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "树人需新建带枝叶摆动的模型，监守者仅作高大类人骨架兜底。"
+    },
+    {
+      "carrier_id": "totem",
+      "model_id": "model.totem",
+      "proxy_entity": "minecraft:armor_stand",
+      "animations": [],
+      "tintable": false,
+      "asset": "NEW",
+      "note": "静态图腾立于原地不动，用盔甲架占位保证兜底可见。"
+    },
+    {
+      "carrier_id": "wisp",
+      "model_id": "model.wisp",
+      "proxy_entity": "minecraft:allay",
+      "animations": ["idle", "walk", "special"],
+      "tintable": true,
+      "asset": "REUSE",
+      "note": "悦灵的悬浮与发光效果贴合光灵，可直接复用。"
+    },
+    {
+      "carrier_id": "serpent",
+      "model_id": "model.serpent",
+      "proxy_entity": "minecraft:ender_dragon",
+      "animations": ["idle", "walk", "attack", "special"],
+      "tintable": true,
+      "asset": "NEW",
+      "note": "巨蛇需新建分节蛇身模型，原版无蛇形生物，暂以末影龙长条骨架兜底。"
+    }
+  ]
+}
