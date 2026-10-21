@@ -1,0 +1,221 @@
+{
+  "version": "1.7.0",
+  "cards": [
+    {
+      "id": "target.carrier.gun",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.gun",
+      "quality_floor": "NONE",
+      "name": "定向·枪",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.sword",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.sword",
+      "quality_floor": "NONE",
+      "name": "定向·剑",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.bow",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.bow",
+      "quality_floor": "NONE",
+      "name": "定向·弓",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.axe",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.axe",
+      "quality_floor": "NONE",
+      "name": "定向·斧",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.staff",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.staff",
+      "quality_floor": "NONE",
+      "name": "定向·法杖",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.armor",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.armor",
+      "quality_floor": "NONE",
+      "name": "定向·护甲",
+      "base_type": "EQUIPMENT"
+    },
+    {
+      "id": "target.carrier.apple",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.apple",
+      "quality_floor": "NONE",
+      "name": "定向·苹果",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.potion",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.potion",
+      "quality_floor": "NONE",
+      "name": "定向·药水",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.scroll",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.scroll",
+      "quality_floor": "NONE",
+      "name": "定向·卷轴",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.bomb",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.bomb",
+      "quality_floor": "NONE",
+      "name": "定向·炸弹",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.feast",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.feast",
+      "quality_floor": "NONE",
+      "name": "定向·盛宴",
+      "base_type": "CONSUMABLE"
+    },
+    {
+      "id": "target.carrier.dragon",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.dragon",
+      "quality_floor": "NONE",
+      "name": "定向·龙",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.beast",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.beast",
+      "quality_floor": "NONE",
+      "name": "定向·兽",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.spirit",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.spirit",
+      "quality_floor": "NONE",
+      "name": "定向·精灵",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.golem",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.golem",
+      "quality_floor": "NONE",
+      "name": "定向·傀儡",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.wraith",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.wraith",
+      "quality_floor": "NONE",
+      "name": "定向·幽灵",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.swarm",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.swarm",
+      "quality_floor": "NONE",
+      "name": "定向·虫群",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.carrier.crystal",
+      "target_layer": "CARRIER",
+      "target_affix": "carrier.crystal",
+      "quality_floor": "NONE",
+      "name": "定向·晶簇",
+      "base_type": "SUMMON"
+    },
+    {
+      "id": "target.elem.lightning",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.lightning",
+      "quality_floor": "NONE",
+      "name": "定向·雷",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.fire",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.fire",
+      "quality_floor": "NONE",
+      "name": "定向·火",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.ice",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.ice",
+      "quality_floor": "NONE",
+      "name": "定向·冰",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.poison",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.poison",
+      "quality_floor": "NONE",
+      "name": "定向·毒",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.light",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.light",
+      "quality_floor": "NONE",
+      "name": "定向·光",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.dark",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.dark",
+      "quality_floor": "NONE",
+      "name": "定向·暗",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.rock",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.rock",
+      "quality_floor": "NONE",
+      "name": "定向·岩",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.wind",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.wind",
+      "quality_floor": "NONE",
+      "name": "定向·风",
+      "base_type": "ANY"
+    },
+    {
+      "id": "target.elem.physical",
+      "target_layer": "ELEMENT",
+      "target_affix": "elem.physical",
+      "quality_floor": "NONE",
+      "name": "定向·物理",
+      "base_type": "ANY"
+    }
+  ]
+}

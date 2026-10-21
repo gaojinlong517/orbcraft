@@ -1,0 +1,1245 @@
+{
+  "version": "1.7.0",
+  "links": [
+    {
+      "from": "elem.lightning",
+      "to": "attr.fireRate",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "高射速感电：触发概率 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.lightning",
+      "to": "effect.chain",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "连锁次数 +1",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.fire",
+      "to": "effect.ignite",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "燃烧伤害 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.ice",
+      "to": "effect.freeze",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "冻结时长 +1s",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.poison",
+      "to": "effect.poisonStack",
+      "type": "SYNERGY",
+      "delta": 2,
+      "desc": "中毒层数上限 +2",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.dark",
+      "to": "effect.execute",
+      "type": "SYNERGY",
+      "delta": 0.05,
+      "desc": "处决阈值 +5%",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.light",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "护盾值 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.rock",
+      "to": "attr.armor",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "护甲 +1",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.wind",
+      "to": "attr.moveSpeed",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "移速 +10%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.lifesteal",
+      "to": "attr.critChance",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "暴击时吸血翻倍概率 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.lifesteal",
+      "to": "effect.lifestealAura",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "吸血光环效果 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.critChance",
+      "to": "attr.critDamage",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "暴击伤害 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.critChance",
+      "to": "effect.execute",
+      "type": "SYNERGY",
+      "delta": 0.05,
+      "desc": "处决阈值 +5%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.fireRate",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "连击判定窗口 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.fireRate",
+      "to": "attr.pierce",
+      "type": "CONFLICT",
+      "delta": -0.2,
+      "desc": "单发伤害 −20%（射速与穿透争夺弹道）",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.pierce",
+      "to": "effect.armorPierce",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "破甲效果 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.attackSpeed",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "连击上限 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.attackSpeed",
+      "to": "effect.counter",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "反击触发率 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.knockback",
+      "to": "effect.freeze",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "冻结期间击退距离 +1",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.knockback",
+      "to": "effect.stun",
+      "type": "SYNERGY",
+      "delta": 0.5,
+      "desc": "眩晕时长 +0.5s",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.aoeRadius",
+      "to": "effect.explosion",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "爆裂范围 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.aoeRadius",
+      "to": "effect.deathBoom",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "亡语爆炸范围 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.statusChance",
+      "to": "effect.ignite",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "点燃概率 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.statusChance",
+      "to": "effect.poisonStack",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "中毒概率 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.statusDuration",
+      "to": "effect.slowField",
+      "type": "SYNERGY",
+      "delta": 1,
+      "desc": "缓速场持续 +1s",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonDamage",
+      "to": "effect.summonEnrage",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "狂暴期攻击 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonHealth",
+      "to": "effect.summonSplit",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "分裂体生命 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonStability",
+      "to": "effect.lastStand",
+      "type": "SYNERGY",
+      "delta": 0.3,
+      "desc": "濒死爆发窗口 +30%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonCount",
+      "to": "effect.summonEnrage",
+      "type": "CONFLICT",
+      "delta": -0.15,
+      "desc": "单体强度 −15%（数量与质量互斥）",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonSpeed",
+      "to": "effect.blink",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "闪现距离 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.duration",
+      "to": "effect.auraBuff",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "光环持续 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.potency",
+      "to": "effect.explosion",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "爆炸伤害 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.potency",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "护盾值 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.healing",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "护盾吸收 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.haste",
+      "to": "effect.sprint",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "疾跑速度 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.haste",
+      "to": "effect.slowField",
+      "type": "CONFLICT",
+      "delta": -0.2,
+      "desc": "疾跑效果 −20%（互相抵消）",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.maxHealth",
+      "to": "effect.thornsBurst",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "反伤 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.armor",
+      "to": "effect.counter",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "反击伤害 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.armor",
+      "to": "effect.reflect",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "反弹比例 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.armor",
+      "to": "attr.moveSpeed",
+      "type": "CONFLICT",
+      "delta": -0.1,
+      "desc": "移速 −10%（重甲代价）",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.thorns",
+      "to": "effect.thornsBurst",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "荆棘反伤 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.elementPower",
+      "to": "attr.elemDamage",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "元素伤害 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.elementPower",
+      "to": "effect.ignite",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "燃烧伤害 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.range",
+      "to": "effect.chain",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "连锁距离 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.range",
+      "to": "attr.accuracy",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "远距离精度 +10%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.blockChance",
+      "to": "effect.counter",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "格挡后反击 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.cleave",
+      "to": "effect.stun",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "顺劈眩晕概率 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.shieldAmount",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "护盾值 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.blastRadius",
+      "to": "effect.explosion",
+      "type": "SYNERGY",
+      "delta": 0.3,
+      "desc": "爆炸范围 +30%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.blastDamage",
+      "to": "effect.deathBoom",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "亡语爆炸伤害 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonAoe",
+      "to": "effect.deathBoom",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "亡语范围 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonRegen",
+      "to": "effect.summonSplit",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "分裂体自愈 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonArmor",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "召唤护盾 +20%",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonLifespan",
+      "to": "effect.lastStand",
+      "type": "SYNERGY",
+      "delta": 0.25,
+      "desc": "濒死续命 +25%",
+      "source": "CURATED"
+    },
+    {
+      "from": "effect.invisibility",
+      "to": "effect.execute",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "隐身首击处决阈值 +10%",
+      "source": "CURATED"
+    },
+    {
+      "from": "effect.sprint",
+      "to": "effect.blink",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "闪现后移速 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "effect.nightVision",
+      "to": "effect.auraBuff",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "光环范围 +10%",
+      "source": "CURATED"
+    },
+    {
+      "from": "effect.fireResist",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "抗性转护盾 +10%",
+      "source": "CURATED"
+    },
+    {
+      "from": "effect.magnet",
+      "to": "effect.combo",
+      "type": "CONFLICT",
+      "delta": -0.1,
+      "desc": "连击判定 −10%（拾取打断节奏）",
+      "source": "CURATED"
+    },
+    {
+      "from": "attr.summonElement",
+      "to": "effect.summonEnrage",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "狂暴期元素伤害 +15%",
+      "source": "CURATED"
+    },
+    {
+      "from": "elem.lightning",
+      "to": "effect.stun",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "感电眩晕 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.lightning",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "连击窗口 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.lightning",
+      "to": "effect.sprint",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "冲刺速度 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.lightning",
+      "to": "effect.counter",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "反击触发率 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.fire",
+      "to": "effect.explosion",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "爆炸附带燃烧 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.fire",
+      "to": "effect.deathBoom",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "亡语爆炸伤害 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.fire",
+      "to": "effect.fireResist",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "火焰抗性 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.fire",
+      "to": "effect.lastStand",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "濒死爆发伤害 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.ice",
+      "to": "effect.slowField",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "缓速场强度 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.ice",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "冰盾值 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.ice",
+      "to": "effect.thornsBurst",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "反伤附带冰冻 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.ice",
+      "to": "effect.reflect",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "反弹附带减速 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.poison",
+      "to": "effect.lifestealAura",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "对中毒目标吸血 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.poison",
+      "to": "effect.blind",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "致盲概率 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.poison",
+      "to": "effect.summonSplit",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "分裂体带毒 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.poison",
+      "to": "effect.magnet",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "磁吸范围 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.light",
+      "to": "effect.auraBuff",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "光环强度 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.light",
+      "to": "effect.nightVision",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "夜视范围 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.light",
+      "to": "effect.lastStand",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "濒死爆发持续 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.light",
+      "to": "effect.counter",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "反击触发率 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.dark",
+      "to": "effect.invisibility",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "隐身时长 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.dark",
+      "to": "effect.blink",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "闪现距离 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.dark",
+      "to": "effect.lifestealAura",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "吸血光环强度 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.dark",
+      "to": "effect.summonEnrage",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "狂暴期攻击 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.rock",
+      "to": "effect.armorPierce",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "破甲效果 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.rock",
+      "to": "effect.thornsBurst",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "反伤 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.rock",
+      "to": "effect.reflect",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "反弹比例 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.rock",
+      "to": "effect.counter",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "反击伤害 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.rock",
+      "to": "effect.stun",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "眩晕概率 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.wind",
+      "to": "effect.jumpBoost",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "跃升高度 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.wind",
+      "to": "effect.sprint",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "疾跑速度 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.wind",
+      "to": "effect.blink",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "闪现距离 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.wind",
+      "to": "effect.magnet",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "磁吸范围 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.wind",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "连击窗口 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.physical",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "连击窗口 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.physical",
+      "to": "effect.armorPierce",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "破甲效果 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.physical",
+      "to": "effect.counter",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "反击伤害 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.physical",
+      "to": "effect.execute",
+      "type": "SYNERGY",
+      "delta": 0.05,
+      "desc": "处决阈值 +5%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.physical",
+      "to": "effect.deathBoom",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "亡语爆炸伤害 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.damage",
+      "to": "effect.execute",
+      "type": "SYNERGY",
+      "delta": 0.05,
+      "desc": "处决阈值 +5%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.critDamage",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "连击伤害 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.durability",
+      "to": "effect.lastStand",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "濒死爆发持续 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.statusDuration",
+      "to": "effect.freeze",
+      "type": "SYNERGY",
+      "delta": 0.5,
+      "desc": "冻结时长 +0.5s",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.accuracy",
+      "to": "effect.execute",
+      "type": "SYNERGY",
+      "delta": 0.05,
+      "desc": "精准处决 +5%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.cooldownReduction",
+      "to": "effect.blink",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "闪现冷却 −15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.maxHealth",
+      "to": "effect.lastStand",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "濒死爆发持续 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.moveSpeed",
+      "to": "effect.sprint",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "疾跑速度 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.ammoCapacity",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "连击上限 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.drawSpeed",
+      "to": "effect.armorPierce",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "破甲效果 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.summonStability",
+      "to": "effect.auraBuff",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "光环稳定 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.summonCount",
+      "to": "effect.summonSplit",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "分裂体数量 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.summonElement",
+      "to": "effect.auraBuff",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "元素光环 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.charges",
+      "to": "effect.magnet",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "磁吸次数 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.hunger",
+      "to": "effect.lastStand",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "濒死回复 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.xpBonus",
+      "to": "effect.auraBuff",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "光环经验 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.lootBonus",
+      "to": "effect.magnet",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "磁吸掉落 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.shieldAmount",
+      "to": "effect.reflect",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "护盾反弹 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.damage",
+      "to": "effect.deathBoom",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "亡语爆炸伤害 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.critChance",
+      "to": "effect.combo",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "连击暴击 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.lifesteal",
+      "to": "effect.execute",
+      "type": "SYNERGY",
+      "delta": 0.05,
+      "desc": "处决回复 +5%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.range",
+      "to": "effect.blind",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "远程致盲 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.aoeRadius",
+      "to": "effect.slowField",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "缓速场范围 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.moveSpeed",
+      "to": "effect.blink",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "闪现距离 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.summonDamage",
+      "to": "effect.summonSplit",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "分裂体攻击 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.duration",
+      "to": "effect.shield",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "护盾持续 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.damage",
+      "to": "attr.critChance",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "暴击伤害 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.lifesteal",
+      "to": "attr.attackSpeed",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "吸血触发 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.fireRate",
+      "to": "attr.ammoCapacity",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "持续输出 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.attackSpeed",
+      "to": "attr.cleave",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "顺劈频率 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.knockback",
+      "to": "attr.cleave",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "顺劈击退 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.armor",
+      "to": "attr.maxHealth",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "生命上限 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.armor",
+      "to": "attr.blockChance",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "格挡率 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.maxHealth",
+      "to": "attr.thorns",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "荆棘反伤 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.summonHealth",
+      "to": "attr.summonArmor",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "召唤护甲 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.summonDamage",
+      "to": "attr.summonSpeed",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "召唤机动 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.summonCount",
+      "to": "attr.summonLifespan",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "存续时间 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.duration",
+      "to": "attr.potency",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "效果强度 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.potency",
+      "to": "attr.charges",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "使用次数 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.healing",
+      "to": "attr.hunger",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "回复量 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.haste",
+      "to": "attr.moveSpeed",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "移速 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.blastRadius",
+      "to": "attr.blastDamage",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "爆炸伤害 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.shieldAmount",
+      "to": "attr.healing",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "护盾回复 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "attr.elementPower",
+      "to": "attr.summonElement",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "召唤元素强度 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.fire",
+      "to": "attr.damage",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "伤害 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.ice",
+      "to": "attr.statusDuration",
+      "type": "SYNERGY",
+      "delta": 0.2,
+      "desc": "状态持续 +20%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.poison",
+      "to": "attr.statusChance",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "状态触发 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.light",
+      "to": "attr.healing",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "治疗量 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.dark",
+      "to": "attr.critDamage",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "暴击伤害 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.physical",
+      "to": "attr.damage",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "伤害 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.lightning",
+      "to": "attr.statusChance",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "状态触发 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.fire",
+      "to": "attr.aoeRadius",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "范围 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.ice",
+      "to": "attr.elementPower",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "元素强度 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.poison",
+      "to": "attr.potency",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "效果强度 +10%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.rock",
+      "to": "attr.maxHealth",
+      "type": "SYNERGY",
+      "delta": 0.15,
+      "desc": "生命上限 +15%",
+      "source": "DERIVED"
+    },
+    {
+      "from": "elem.wind",
+      "to": "attr.attackSpeed",
+      "type": "SYNERGY",
+      "delta": 0.1,
+      "desc": "攻速 +10%",
+      "source": "DERIVED"
+    }
+  ]
+}

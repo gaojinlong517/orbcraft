@@ -1,0 +1,960 @@
+{
+  "version": "1.7.0",
+  "layer": "CARRIER",
+  "affixes": [
+    {
+      "id": "carrier.gun",
+      "family": "carrier.gun",
+      "layer": "CARRIER",
+      "name": "枪",
+      "base_type": "EQUIPMENT",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.gun",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "DURABILITY_PCT",
+            "value": -0.2
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "UNREPAIRABLE",
+            "value": 1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.sword",
+      "family": "carrier.sword",
+      "layer": "CARRIER",
+      "name": "剑",
+      "base_type": "EQUIPMENT",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.sword",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "DURABILITY_PCT",
+            "value": -0.2
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.bow",
+      "family": "carrier.bow",
+      "layer": "CARRIER",
+      "name": "弓",
+      "base_type": "EQUIPMENT",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.bow",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "DURABILITY_PCT",
+            "value": -0.2
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.axe",
+      "family": "carrier.axe",
+      "layer": "CARRIER",
+      "name": "斧",
+      "base_type": "EQUIPMENT",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.axe",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "DURABILITY_PCT",
+            "value": -0.2
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "UNREPAIRABLE",
+            "value": 1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.staff",
+      "family": "carrier.staff",
+      "layer": "CARRIER",
+      "name": "法杖",
+      "base_type": "EQUIPMENT",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.staff",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "DURABILITY_PCT",
+            "value": -0.2
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.armor",
+      "family": "carrier.armor",
+      "layer": "CARRIER",
+      "name": "护甲",
+      "base_type": "EQUIPMENT",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.armor",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "DURABILITY_PCT",
+            "value": -0.2
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "UNREPAIRABLE",
+            "value": 1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.apple",
+      "family": "carrier.apple",
+      "layer": "CARRIER",
+      "name": "苹果",
+      "base_type": "CONSUMABLE",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.apple",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.potion",
+      "family": "carrier.potion",
+      "layer": "CARRIER",
+      "name": "药水",
+      "base_type": "CONSUMABLE",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.potion",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.scroll",
+      "family": "carrier.scroll",
+      "layer": "CARRIER",
+      "name": "卷轴",
+      "base_type": "CONSUMABLE",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.scroll",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.bomb",
+      "family": "carrier.bomb",
+      "layer": "CARRIER",
+      "name": "炸弹",
+      "base_type": "CONSUMABLE",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.bomb",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.feast",
+      "family": "carrier.feast",
+      "layer": "CARRIER",
+      "name": "盛宴",
+      "base_type": "CONSUMABLE",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.feast",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.dragon",
+      "family": "carrier.dragon",
+      "layer": "CARRIER",
+      "name": "龙",
+      "base_type": "SUMMON",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.dragon",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.beast",
+      "family": "carrier.beast",
+      "layer": "CARRIER",
+      "name": "兽",
+      "base_type": "SUMMON",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.beast",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.spirit",
+      "family": "carrier.spirit",
+      "layer": "CARRIER",
+      "name": "精灵",
+      "base_type": "SUMMON",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.spirit",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.golem",
+      "family": "carrier.golem",
+      "layer": "CARRIER",
+      "name": "傀儡",
+      "base_type": "SUMMON",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.golem",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.wraith",
+      "family": "carrier.wraith",
+      "layer": "CARRIER",
+      "name": "幽灵",
+      "base_type": "SUMMON",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.wraith",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.swarm",
+      "family": "carrier.swarm",
+      "layer": "CARRIER",
+      "name": "虫群",
+      "base_type": "SUMMON",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.swarm",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    },
+    {
+      "id": "carrier.crystal",
+      "family": "carrier.crystal",
+      "layer": "CARRIER",
+      "name": "晶簇",
+      "base_type": "SUMMON",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "model.crystal",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "基础属性 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "基础属性 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "基础属性 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "基础属性 +20%"
+        }
+      ]
+    }
+  ]
+}

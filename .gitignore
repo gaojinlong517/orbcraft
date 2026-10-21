@@ -1,0 +1,84 @@
+# ============================================================
+# orbcraft - git ignore rules
+# repo root = the directory containing docs/ and orbcraft/
+# ============================================================
+
+# ---- Local tool state (WorkBuddy workspace data) ----
+.workbuddy/
+
+# ---- Java compile output ----
+*.class
+out/
+bin/
+hs_err_pid*
+replay_pid*
+
+# ---- Gradle ----
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# ---- Fabric Loom / Minecraft dev runtime ----
+run/
+runs/
+.loom-cache/
+loom-cache/
+remappedSrc/
+
+# ---- Minecraft world & server runtime data ----
+world/
+world_nether/
+world_the_end/
+saves/
+/logs/
+/crash-reports/
+eula.txt
+server.properties
+ops.json
+whitelist.json
+banned-ips.json
+banned-players.json
+usercache.json
+server-icon.png
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.factorypath
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+
+# ---- Local environment / secrets ----
+.env
+.env.*
+!.env.example
+local.properties
+*.local
+
+# ---- Logs & temp files ----
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+
+# ---- OS junk ----
+.DS_Store
+Thumbs.db
+desktop.ini

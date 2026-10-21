@@ -1,0 +1,18 @@
+# Normalize line endings: store LF in the repo, check out LF.
+# Keeps diffs clean across Windows (home PC) and Linux (CI / server).
+* text=auto eol=lf
+
+# Binary files - never touch line endings
+*.jar binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ogg binary
+*.bbmodel binary
+
+# Windows scripts must keep CRLF to run correctly
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

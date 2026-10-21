@@ -1,0 +1,487 @@
+{
+  "version": "1.7.0",
+  "layer": "ELEMENT",
+  "affixes": [
+    {
+      "id": "elem.lightning",
+      "family": "elem.lightning",
+      "layer": "ELEMENT",
+      "name": "雷",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "elem.lightning",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.fire",
+      "family": "elem.fire",
+      "layer": "ELEMENT",
+      "name": "火",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [
+        "elem.ice"
+      ],
+      "weight": 100,
+      "appearance_key": "elem.fire",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.ice",
+      "family": "elem.ice",
+      "layer": "ELEMENT",
+      "name": "冰",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [
+        "elem.fire"
+      ],
+      "weight": 100,
+      "appearance_key": "elem.ice",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.poison",
+      "family": "elem.poison",
+      "layer": "ELEMENT",
+      "name": "毒",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "elem.poison",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.light",
+      "family": "elem.light",
+      "layer": "ELEMENT",
+      "name": "光",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "elem.light",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.dark",
+      "family": "elem.dark",
+      "layer": "ELEMENT",
+      "name": "暗",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "elem.dark",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.rock",
+      "family": "elem.rock",
+      "layer": "ELEMENT",
+      "name": "岩",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "elem.rock",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.wind",
+      "family": "elem.wind",
+      "layer": "ELEMENT",
+      "name": "风",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "elem.wind",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "MOVE_SPEED_PCT",
+            "value": -0.1
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    },
+    {
+      "id": "elem.physical",
+      "family": "elem.physical",
+      "layer": "ELEMENT",
+      "name": "物理",
+      "base_type": "ANY",
+      "carrier_allow": [],
+      "carrier_deny": [],
+      "element_allow": [],
+      "excludes": [],
+      "weight": 100,
+      "appearance_key": "elem.physical",
+      "tiers": [
+        {
+          "tier": "WHITE",
+          "points": 1,
+          "magnitude": 1,
+          "value": 5,
+          "drawback": null,
+          "desc": "元素浓度 +5%"
+        },
+        {
+          "tier": "BLUE",
+          "points": 2,
+          "magnitude": 1.6,
+          "value": 8,
+          "drawback": null,
+          "desc": "元素浓度 +8%"
+        },
+        {
+          "tier": "GOLD",
+          "points": 4,
+          "magnitude": 2.5,
+          "value": 13,
+          "drawback": {
+            "type": "MATERIAL_EXTRA",
+            "value": 1
+          },
+          "desc": "元素浓度 +13%"
+        },
+        {
+          "tier": "RED",
+          "points": 7,
+          "magnitude": 4,
+          "value": 20,
+          "drawback": {
+            "type": "HATCH_TIME_PCT",
+            "value": 0.5
+          },
+          "desc": "元素浓度 +20%"
+        }
+      ]
+    }
+  ]
+}
