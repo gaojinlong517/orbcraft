@@ -103,6 +103,31 @@ public record Affix(
         return elementId != null && elementAllow.contains(elementId);
     }
 
+    /**
+     * 本词条是否与<b>其中任意一个</b>元素兼容。
+     *
+     * <p>产物可以同时带两个元素（修饰层双选时），这时效果池必须是
+     * 「火能用的」∪「冰能用的」，而不是「既能火又能冰的」——
+     * 后者会把 64 个效果族砍到 9 个，且结果取决于玩家先点哪张元素卡。
+     *
+     * <p>{@code elementIds} 为空表示不按元素过滤（等价于 {@code allowsElement(null)}
+     * 在无限制词条上的效果，但语义更明确：空集不是「什么都不匹配」）。
+     */
+    public boolean allowsAnyElement(Set<String> elementIds) {
+        if (elementAllow.isEmpty()) {
+            return true;
+        }
+        if (elementIds == null || elementIds.isEmpty()) {
+            return true;
+        }
+        for (String id : elementIds) {
+            if (id != null && elementAllow.contains(id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean allowsBaseType(String productType) {
         return "ANY".equals(baseType) || baseType.equals(productType);
     }

@@ -1,5 +1,6 @@
 package com.orbcraft.core.build;
 
+import com.orbcraft.core.draft.Affix;
 import com.orbcraft.core.draft.AffixData;
 import com.orbcraft.core.draft.AffixTable;
 import com.orbcraft.core.draft.BaseKind;
@@ -67,6 +68,7 @@ public final class BuildSelfTest {
         modifierLayerRules();
         modifierDoublePick();
         effectLayerAndFinish();
+        elementUnionPool();
         noTradingSurface();
         seedReproducible();
         configValidation();
@@ -639,6 +641,233 @@ public final class BuildSelfTest {
 
         report("样例", c.brief());
         report("详情", c.describe().replace("\n", " | "));
+    }
+
+    // ================================================================ 双元素效果池
+
+    /**
+     * 双元素时效果池取<b>并集</b>（「任一匹配」）。
+     *
+     * <p>这里用迷你表而不是真实卡表，原因是真实卡表的元素卡只占修饰池的一小块
+     * （9 条元素 vs 数百条属性），随机发 5 张几乎撞不到「同手两张元素卡」，
+     * 这个分支在真实数据下无法稳定复现 —— 而它恰恰是最容易写错的分支。
+     */
+    private static void elementUnionPool() {
+        section("双元素：效果池取并集（任一匹配）");
+
+        Affix fireOnly = miniAffix("effect.t.burn", "effect.t.burn", Layer.EFFECT, Set.of("fire"));
+        Affix anyElement = miniAffix("effect.t.plain", "effect.t.plain", Layer.EFFECT, Set.of());
+
+        check("单元素命中", fireOnly.allowsAnyElement(Set.of("fire")), "");
+        check("元素不在白名单内被排除", !fireOnly.allowsAnyElement(Set.of("ice")), "");
+        check("集合里任一命中即可", fireOnly.allowsAnyElement(Set.of("ice", "fire")), "");
+        check("集合全不命中才排除", !fireOnly.allowsAnyElement(Set.of("ice", "poison")), "");
+        check("空集对受限词条也不过滤",
+                fireOnly.allowsAnyElement(Set.of()) && anyElement.allowsAnyElement(Set.of()), "");
+
+        // ---- 端到端：同 seed 下点击顺序不影响结果
+        boolean orderFree = true;
+        String firstMismatch = "";
+        for (long seed = 1; seed <= 60; seed++) {
+            List<DraftCard> fireFirst = effectCandidates(true, seed);
+            List<DraftCard> iceFirst = effectCandidates(false, seed);
+            if (!sameIds(fireFirst, iceFirst)) {
+                orderFree = false;
+                if (firstMismatch.isEmpty()) {
+                    firstMismatch = "seed " + seed + "：" + idsOf(fireFirst) + " vs " + idsOf(iceFirst);
+                }
+            }
+        }
+        check("同 seed 下元素点击顺序不影响效果候选", orderFree, firstMismatch);
+
+        // ---- 池子是并集，不是交集
+        Set<String> union = new LinkedHashSet<>();
+        boolean bothInOneHand = false;
+        for (long seed = 1; seed <= 60; seed++) {
+            List<DraftCard> cards = effectCandidates(true, seed);
+            Set<String> ids = new LinkedHashSet<>(idsOf(cards));
+            union.addAll(ids);
+            if (ids.contains("effect.burn") && ids.contains("effect.freeze")) {
+                bothInOneHand = true;
+            }
+        }
+        check("双元素：火系专属效果在池中", union.contains("effect.burn"), union.toString());
+        check("双元素：冰系专属效果也在池中（并集，不是交集）",
+                union.contains("effect.freeze"), union.toString());
+        check("双元素：同一手牌里可以同时出现火系与冰系效果", bothInOneHand, "");
+
+        Set<String> fireAlone = new LinkedHashSet<>();
+        for (long seed = 1; seed <= 60; seed++) {
+            fireAlone.addAll(idsOf(effectCandidatesSingle("fire", seed)));
+        }
+        check("单元素火：仍能抽到火系专属效果", fireAlone.contains("effect.burn"), fireAlone.toString());
+        check("单元素火：不会混入冰系专属效果", !fireAlone.contains("effect.freeze"), fireAlone.toString());
+
+        // ---- 双元素不缩小池子：候选张数与单元素一致（都是 5 张）
+        check("双元素：效果候选仍是 5 张", effectCandidates(true, 7L).size() == 5,
+                "" + effectCandidates(true, 7L).size());
+
+        // ---- 修饰选了两张属性卡（无元素）时，效果池不按元素过滤
+        Set<String> noElement = new LinkedHashSet<>();
+        for (long seed = 1; seed <= 60; seed++) {
+            noElement.addAll(idsOf(effectCandidatesWithoutElement(seed)));
+        }
+        check("无元素时：火系与冰系效果都可出现",
+                noElement.contains("effect.burn") && noElement.contains("effect.freeze"),
+                noElement.toString());
+
+        // ---- 端到端：点击顺序不同，产物必须完全一致（含 specId）
+        boolean sameProduct = true;
+        String productDiff = "";
+        for (long seed = 1; seed <= 20; seed++) {
+            Composition a = doubleElementProduct(true, seed);
+            Composition b = doubleElementProduct(false, seed);
+            if (!sameComposition(a, b)
+                    || !a.describe().equals(b.describe())
+                    || !a.brief().equals(b.brief())) {
+                sameProduct = false;
+                if (productDiff.isEmpty()) {
+                    productDiff = "seed " + seed + "：" + a.brief() + " vs " + b.brief();
+                }
+            }
+        }
+        check("同 seed 下元素点击顺序不影响最终产物（含卡序与文案）", sameProduct, productDiff);
+    }
+
+    /** 迷你表上走到修饰层。{@code modifierPick} 为修饰层选取数。 */
+    private static BuildSession miniSession(long seed, int modifierPick) {
+        BuildConfig cfg = BuildConfig.defaults()
+                .withDealCounts(5, 8, 5)
+                .withModifierPickCount(modifierPick);
+        BuildSession s = new BuildSession(miniTable(), cfg, seed);
+        s.chooseType(BaseKind.EQUIPMENT);
+        s.confirm();
+        s.choose(0);
+        s.confirm();
+        return s;
+    }
+
+    /**
+     * 迷你表上走到效果层，修饰固定选「火 + 冰」两张元素卡。
+     *
+     * @param fireFirst {@code true} 先点火再点冰；{@code false} 反过来
+     */
+    private static BuildSession doubleElementSession(boolean fireFirst, long seed) {
+        BuildSession s = miniSession(seed, 2);
+        List<DraftCard> mods = s.cards();
+        int fire = indexOfElement(mods, "fire");
+        int ice = indexOfElement(mods, "ice");
+        if (fire < 0 || ice < 0) {
+            throw new IllegalStateException("迷你表修饰候选里缺元素卡：" + layerOrder(mods));
+        }
+        if (fireFirst) {
+            s.choose(fire);
+            s.choose(ice);
+        } else {
+            s.choose(ice);
+            s.choose(fire);
+        }
+        s.confirm();
+        return s;
+    }
+
+    private static List<DraftCard> effectCandidates(boolean fireFirst, long seed) {
+        return doubleElementSession(fireFirst, seed).cards();
+    }
+
+    /** 双元素走到终点：效果层选第 0 张，返回完整产物。 */
+    private static Composition doubleElementProduct(boolean fireFirst, long seed) {
+        BuildSession s = doubleElementSession(fireFirst, seed);
+        s.choose(0);
+        return s.confirm().orElseThrow(() -> new IllegalStateException("未产出组合"));
+    }
+
+    /** 效果层候选：修饰只选 {@code element} 这<b>一张</b>元素卡（单元素对照）。 */
+    private static List<DraftCard> effectCandidatesSingle(String element, long seed) {
+        BuildSession s = miniSession(seed, 1);
+        List<DraftCard> mods = s.cards();
+        int idx = indexOfElement(mods, element);
+        if (idx < 0) {
+            throw new IllegalStateException("迷你表修饰候选里缺 " + element + "：" + layerOrder(mods));
+        }
+        s.choose(idx);
+        s.confirm();
+        return s.cards();
+    }
+
+    /** 效果层候选：修饰只选两张<b>属性</b>卡，元素集合为空。 */
+    private static List<DraftCard> effectCandidatesWithoutElement(long seed) {
+        BuildSession s = miniSession(seed, 2);
+        List<DraftCard> mods = s.cards();
+        int picked = 0;
+        for (int i = 0; i < mods.size() && picked < 2; i++) {
+            if (mods.get(i).affix().layer() == Layer.ATTRIBUTE) {
+                s.choose(i);
+                picked++;
+            }
+        }
+        s.confirm();
+        return s.cards();
+    }
+
+    private static int indexOfElement(List<DraftCard> cards, String element) {
+        for (int i = 0; i < cards.size(); i++) {
+            if (element.equals(cards.get(i).affix().elementId())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static List<String> idsOf(List<DraftCard> cards) {
+        List<String> out = new ArrayList<>(cards.size());
+        for (DraftCard c : cards) {
+            out.add(c.affix().id());
+        }
+        return out;
+    }
+
+    /** 迷你词条：四档数值齐全，只保留本组测试要验证的过滤字段。 */
+    private static Affix miniAffix(String id, String family, Layer layer, Set<String> elementAllow) {
+        Map<Tier, TierData> tiers = new EnumMap<>(Tier.class);
+        for (Tier t : Tier.values()) {
+            tiers.put(t, new TierData(t, t.designPoints(), 1.0, t.designPoints(), null, "测试词条"));
+        }
+        return new Affix(id, family, layer, id, "ANY",
+                Set.of(), Set.of(), elementAllow, Set.of(), 10, "", tiers);
+    }
+
+    /**
+     * 迷你卡表：5 载体 + 2 元素(fire/ice) + 6 属性 + 7 效果。
+     *
+     * <p>效果池刻意做成「火系专属 1 + 冰系专属 1 + 通用 5」：
+     * 交集语义会只剩 5 张通用牌，并集语义才有 7 张 —— 两者在候选里能直接看出来。
+     */
+    private static AffixTable miniTable() {
+        List<Affix> carriers = new ArrayList<>();
+        for (String c : List.of("gun", "staff", "blade", "bow", "orb")) {
+            carriers.add(miniAffix("carrier." + c, "carrier." + c, Layer.CARRIER, Set.of()));
+        }
+        List<Affix> elements = new ArrayList<>();
+        for (String e : List.of("fire", "ice")) {
+            elements.add(miniAffix("elem." + e, "elem." + e, Layer.ELEMENT, Set.of()));
+        }
+        List<Affix> attributes = new ArrayList<>();
+        for (int i = 1; i <= 6; i++) {
+            attributes.add(miniAffix("attr.t" + i, "attr.t" + i, Layer.ATTRIBUTE, Set.of()));
+        }
+        List<Affix> effects = new ArrayList<>();
+        effects.add(miniAffix("effect.burn", "effect.burn", Layer.EFFECT, Set.of("fire")));
+        effects.add(miniAffix("effect.freeze", "effect.freeze", Layer.EFFECT, Set.of("ice")));
+        for (int i = 1; i <= 5; i++) {
+            effects.add(miniAffix("effect.plain" + i, "effect.plain" + i, Layer.EFFECT, Set.of()));
+        }
+        Map<Layer, List<Affix>> byLayer = new EnumMap<>(Layer.class);
+        byLayer.put(Layer.CARRIER, carriers);
+        byLayer.put(Layer.ELEMENT, elements);
+        byLayer.put(Layer.ATTRIBUTE, attributes);
+        byLayer.put(Layer.EFFECT, effects);
+        return AffixTable.of(byLayer);
     }
 
     // ================================================================ 无交易面
@@ -1232,14 +1461,6 @@ public final class BuildSelfTest {
     }
 
     /** 卡牌的词条 id 序列（顺序保留，用于验证「这一批」的身份）。 */
-    private static List<String> idsOf(List<DraftCard> cards) {
-        List<String> out = new ArrayList<>(cards.size());
-        for (DraftCard c : cards) {
-            out.add(c.affix().id());
-        }
-        return out;
-    }
-
     private static boolean disjoint(List<String> a, List<String> b) {
         for (String x : a) {
             if (b.contains(x)) {

@@ -76,6 +76,15 @@ public final class BuildSession {
             BaseKind.EQUIPMENT, BaseKind.SUMMON, BaseKind.CONSUMABLE
     };
 
+    /**
+     * 「不按元素过滤」。修饰层只选了属性卡、或形态层发牌时用它。
+     *
+     * <p>与「元素集合里恰好没有元素」区分开：{@code null} 表示调用方<b>还没定</b>元素，
+     * 空集表示调用方<b>确认了不限制</b>。两者在这里行为一致，但语义不同，
+     * 所以只允许用常量表达后者。
+     */
+    private static final Set<String> ANY_ELEMENT = Set.of();
+
     private final AffixTable table;
     private final BuildConfig config;
     private final SeedRandom rng;
@@ -710,7 +719,7 @@ public final class BuildSession {
      * 拆层后这个问题在结构上不存在：修饰池只在形态确认后才被过滤。
      */
     private void dealShape() {
-        List<Affix> candidates = pool(Layer.CARRIER, null, null);
+        List<Affix> candidates = pool(Layer.CARRIER, null, ANY_ELEMENT);
         if (candidates.size() < config.shapePickCount()) {
             throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
                     "「" + kind.zh() + "」可用形态只有 " + candidates.size()
@@ -745,7 +754,7 @@ public final class BuildSession {
             throw new BuildException(BuildException.Code.REROLL_EXHAUSTED,
                     "形态层换批次数已用尽（配置 " + config.shapeRerolls() + " 次）");
         }
-        List<Affix> candidates = pool(Layer.CARRIER, null, null);
+        List<Affix> candidates = pool(Layer.CARRIER, null, ANY_ELEMENT);
         List<DraftCard> next = drawShapeBatch(candidates, true);
         shapeRerollsLeft--;
         shapeChosen.clear();
@@ -857,8 +866,8 @@ public final class BuildSession {
             throw new BuildException(BuildException.Code.CARRIER_REQUIRED,
                     "形态尚未确认，无法生成修饰牌");
         }
-        List<Affix> pool = new ArrayList<>(pool(Layer.ELEMENT, carrier, null));
-        pool.addAll(pool(Layer.ATTRIBUTE, carrier, null));
+        List<Affix> pool = new ArrayList<>(pool(Layer.ELEMENT, carrier, ANY_ELEMENT));
+        pool.addAll(pool(Layer.ATTRIBUTE, carrier, ANY_ELEMENT));
 
         if (pool.size() < config.modifierPickCount()) {
             throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
@@ -873,12 +882,12 @@ public final class BuildSession {
     /** 效果层发牌：按已确定的类型 / 载体 / 元素过滤效果池。 */
     private void dealEffect() {
         String carrier = confirmedCarrier();
-        String element = confirmedElement();
+        Set<String> elements = confirmedElements();
 
-        List<Affix> pool = pool(Layer.EFFECT, carrier, element);
+        List<Affix> pool = pool(Layer.EFFECT, carrier, elements);
         if (pool.size() < config.effectPickCount()) {
             throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
-                    "载体 " + carrier + " / 元素 " + element + " 下只有 " + pool.size()
+                    "载体 " + carrier + " / 元素 " + elementsLabel(elements) + " 下只有 " + pool.size()
                             + " 条可用效果，本层需要至少 " + config.effectPickCount() + " 张");
         }
         shuffle(pool);
@@ -920,12 +929,17 @@ public final class BuildSession {
     }
 
     /**
-     * 过滤候选池。
+     * 过滤候选池（多元素版）。
      *
-     * <p>四道关，缺任何一道都会让玩家抽到读不懂的选项：
-     * 类型不匹配、族已用过、载体不允许、元素不允许、族互斥。
+     * <p>元素用<b>集合</b>而不是单个 id：产物可以同时带两个元素，
+     * 此时一条效果只要与其中<b>任一</b>兼容就该出现。用单值会退化成
+     * 「先点哪张元素卡就按哪张算」，同样的两张牌换个点击顺序得到不同牌池 —— 那是 bug。
+     *
+     * <p>{@link #ANY_ELEMENT} 表示不按元素过滤。这里<b>只保留集合重载</b>：
+     * 留一个 {@code String} 版本会让 {@code pool(layer, carrier, null)} 这种调用
+     * 在两个重载间二义，编译器直接报错。
      */
-    private List<Affix> pool(Layer layer, String carrierId, String elementId) {
+    private List<Affix> pool(Layer layer, String carrierId, Set<String> elementIds) {
         List<Affix> out = new ArrayList<>();
         for (Affix a : table.layer(layer)) {
             if (!a.allowsBaseType(kind.wire())) {
@@ -938,7 +952,7 @@ public final class BuildSession {
                 if (carrierId != null && !a.allowsCarrier(carrierId)) {
                     continue;
                 }
-                if (elementId != null && !a.allowsElement(elementId)) {
+                if (!a.allowsAnyElement(elementIds)) {
                     continue;
                 }
                 if (a.conflictsWith(usedFamilies)) {
@@ -1062,15 +1076,31 @@ public final class BuildSession {
         return null;
     }
 
-    /** 已确认修饰里的元素 id；修饰选了属性卡时返回 null（效果池不按元素过滤）。 */
-    private String confirmedElement() {
+    /**
+     * 已确认修饰里的<b>全部</b>元素 id。
+     *
+     * <p>返回集合而不是单个 id：修饰层可以是双选（{@code modifierPickCount = 2}），
+     * 玩家完全可能选「火」+「冰」。旧实现只取第一个匹配，结果取决于
+     * {@code modifierPicked} 的入列顺序 —— 也就是玩家的点击顺序。
+     * 同样的两张牌，先点火再点冰与先点冰再点火会得到不同的效果池，这是 bug 不是玩法。
+     *
+     * <p>修饰全选属性卡时返回 {@link #ANY_ELEMENT}（效果池不按元素过滤）。
+     * 元素卡在数据上可能重复（同一元素两张不同族），这里按 id 去重。
+     */
+    private Set<String> confirmedElements() {
+        Set<String> out = new LinkedHashSet<>();
         for (DraftCard c : modifierPicked) {
             String id = c.affix().elementId();
             if (id != null) {
-                return id;
+                out.add(id);
             }
         }
-        return null;
+        return out.isEmpty() ? ANY_ELEMENT : out;
+    }
+
+    /** 错误文案用：{@code [fire, ice]} / {@code 不限}。 */
+    private static String elementsLabel(Set<String> elements) {
+        return elements.isEmpty() ? "不限" : elements.toString();
     }
 
     private Composition buildComposition() {
@@ -1081,7 +1111,13 @@ public final class BuildSession {
         all.addAll(effectPicked);
         // 固定顺序：载体 → 元素 → 属性 → 效果。顺序不产生玩法意义，但必须确定，
         // 否则同一产物两次序列化的结果不相等，幂等判断会失效。
-        all.sort(Comparator.comparingInt(c -> c.affix().layer().ordinal()));
+        //
+        // 同层内按 affix id 排第二关键字：修饰层双选时，modifierPicked 的入列顺序就是
+        // 玩家的<b>点击顺序</b>。只按 layer 排序的话，先点火再点冰与先点冰再点火会得到
+        // 两张卡顺序相反的 cards，而 settle 的 specId 是逐卡拼接的 —— 同一组卡、同一个
+        // seed，仅因点击顺序不同就产出两个不同的 specId，幂等判断被绕过。
+        all.sort(Comparator.comparingInt((DraftCard c) -> c.affix().layer().ordinal())
+                .thenComparing(c -> c.affix().id()));
 
         int total = 0;
         for (DraftCard c : all) {
