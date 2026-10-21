@@ -8,9 +8,11 @@ import com.orbcraft.fabric.entity.orb.OrbEntities;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
 
 /**
@@ -60,11 +62,19 @@ public final class OrbItems {
      *
      * <p>堆叠上限 1：每颗球带自己的票据与进度，堆在一起就不能分别读条了。
      * 这也是「同时最多 5 个在孵」那套限制在物品栏里的自然延伸。
+     *
+     * <p><b>{@code setId} 不能省。</b> 1.21.4 起 {@code Item.Properties} 必须自带 id，
+     * {@code Item} 构造函数会用它算 {@code descriptionId}（默认翻译键）。
+     * 不给的话不是「名字显示不出来」，而是构造时就
+     * {@code NullPointerException: Item id not set} —— 而且**编译期完全查不出来**，
+     * 表现为服务端起不来，堆栈指向静态初始化块。这个坑是跑 {@code runServer} 才暴露的。
      */
     public static final Item ORB = Registry.register(
             BuiltInRegistries.ITEM,
             ITEM_ID,
-            new OrbItem(new Item.Properties().stacksTo(1)));
+            new OrbItem(new Item.Properties()
+                    .setId(ResourceKey.create(Registries.ITEM, ITEM_ID))
+                    .stacksTo(1)));
 
     /**
      * 契约实现。公开成常量是为了让 S5 在需要「最早位置拦截」时能拿到同一个实例 ——
