@@ -15,6 +15,7 @@ import com.orbcraft.core.quota.QuotaManager;
 import com.orbcraft.core.settle.MaterialTier;
 import com.orbcraft.core.spec.BehaviorMode;
 import com.orbcraft.core.target.TargetAllowance;
+import com.orbcraft.fabric.store.OrbcraftStore;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
@@ -190,7 +191,7 @@ final class BuildScreens {
         send(player, Component.literal("[构筑] 预览 · " + spec.rarity().zh() + " · " + comp.kind().zh()
                 + " · " + spec.displayName()).withStyle(ACCENT));
 
-        QuotaManager.State state = BuildRuntime.incubation().stateOf(seat.ownerKey());
+        QuotaManager.State state = OrbcraftStore.hatch().stateOf(seat.ownerKey());
         int before = state.usedPoints();
         int after = before + preview.cost();
         send(player, Component.literal("  孵化 " + clock(spec.hatchSeconds())
@@ -219,8 +220,8 @@ final class BuildScreens {
     // ------------------------------------------------------------------ 定向卡
 
     static void showTargets(ServerPlayer player, BuildSeat seat) {
-        TargetAllowance book = BuildRuntime.allowanceOf(seat.ownerKey());
-        long today = BuildRuntime.todayEpochDay();
+        TargetAllowance book = OrbcraftStore.targetsOf(seat.ownerKey());
+        long today = OrbcraftStore.todayEpochDay();
         BaseKind kind = seat.session() == null ? null : seat.session().kind().orElse(null);
 
         if (kind == null) {

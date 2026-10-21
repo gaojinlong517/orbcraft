@@ -26,6 +26,7 @@ import com.orbcraft.core.target.TargetException;
 import com.orbcraft.core.target.TargetPlan;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.Services;
+import com.orbcraft.fabric.store.OrbcraftStore;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.server.level.ServerPlayer;
@@ -205,6 +206,10 @@ public final class BuildFlow {
      * 「额度扣了但定向被拒」的状态，而 core 没有退额度的入口，玩家当天就少一次机会。
      * 极端情况下（同一 tick 内两次请求）可能出现「生效了但没扣」，那是白送一次，
      * 比扣了不生效安全得多。
+     *
+     * <p>扣额度必须走 {@code OrbcraftStore.useTarget}：{@code TargetAllowance.use} 返回的是
+     * 新实例，存回与立即落盘都在 S4 那边做。这里自己调 {@code use} 再把新实例揣在会话里，
+     * 跨重启就丢 —— 那是「额度回来了」这类投诉的根因。
      */
     public static void useTarget(ServerPlayer player, String cardId) {
         BuildSeat seat = require(player);
@@ -233,8 +238,8 @@ public final class BuildFlow {
             BuildScreens.toast(player, "「" + card + "」不适用于" + kind.zh(), ChatFormatting.RED);
             return;
         }
-        long today = BuildRuntime.todayEpochDay();
-        int left = BuildRuntime.allowanceOf(seat.ownerKey()).remaining(seat.ownerKey(), today, kind);
+        long today = OrbcraftStore.todayEpochDay();
+        int left = OrbcraftStore.targetsOf(seat.ownerKey()).remaining(seat.ownerKey(), today, kind);
         if (left <= 0) {
             BuildScreens.toast(player, kind.zh() + "今天的定向额度已用完", ChatFormatting.RED);
             return;
@@ -252,7 +257,7 @@ public final class BuildFlow {
             BuildScreens.toast(player, "定向卡没生效：" + e.getMessage(), ChatFormatting.RED);
             return;
         }
-        Optional<TargetAllowance> after = BuildRuntime.spendTarget(seat.ownerKey(), today, kind);
+        Optional<TargetAllowance> after = OrbcraftStore.useTarget(seat.ownerKey(), today, kind);
         if (after.isEmpty()) {
             // 上面的 remaining 已经挡过一次，走到这里说明并发写坏了账本 —— 要报警
             LOG.warn("[orbcraft/build] 定向卡已生效但额度扣减失败：{} {}", seat.ownerKey(), card.id());
@@ -348,7 +353,7 @@ public final class BuildFlow {
                 .withAltar(seat.onAltar());
         IncubationService.Preview result;
         try {
-            result = BuildRuntime.incubation().preview(submit);
+            result = OrbcraftStore.hatch().preview(submit);
         } catch (RuntimeException e) {
             LOG.error("[orbcraft/build] 预览失败", e);
             BuildScreens.toast(player, "预览算不出来：" + e.getMessage(), ChatFormatting.RED);
@@ -392,12 +397,12 @@ public final class BuildFlow {
             return;
         }
 
-        long now = player.level().getGameTime();
+        long now = OrbcraftStore.nowTick();
         // lastActiveTick 传 now：玩家此刻正在敲命令，他就是活跃的。
         // 离线封顶只对「重启后恢复的旧票据」有意义，不该拿它削减在线玩家刚造的球。
         HatchTicket ticket;
         try {
-            ticket = BuildRuntime.incubation().submit(now, now, pending);
+            ticket = OrbcraftStore.hatch().submit(now, now, pending);
         } catch (HatchException e) {
             BuildScreens.toast(player, "造不出来：" + e.getMessage(), ChatFormatting.RED);
             seat.clearPending();
@@ -423,6 +428,8 @@ public final class BuildFlow {
             player.drop(orbStack, false);
         }
         seat.endSession();
+        // submit 是唯一扣配额的地方：等 5 分钟定时保存，玩家在这期间崩服就等于白拿一次
+        OrbcraftStore.saveNow(player.getUUID());
         BuildScreens.toast(player, "造好了：" + ticket.spec().displayName() + " · 充能 "
                 + ticket.totalSeconds() + " 秒"
                 + (stored ? " · 球已放进背包" : " · 背包满了，球掉在脚下"), ChatFormatting.GREEN);
