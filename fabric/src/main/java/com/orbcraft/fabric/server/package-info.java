@@ -6,7 +6,10 @@
  *   <li><b>时间推进</b>：{@link com.orbcraft.fabric.server.HatchRuntime} 是
  *       {@code IncubationService.tick(nowTick)} 在全项目里<b>唯一</b>的调用点。
  *       推进点重复的后果不是性能，而是同一张票据被两次判定为「本次新就绪」，
- *       玩家聊天栏里出现两条一模一样的完成提示 —— 看起来像刷屏 bug，实际是 tick 重入。</li>
+ *       玩家聊天栏里出现两条一模一样的完成提示 —— 看起来像刷屏 bug，实际是 tick 重入。
+ *       注意它<b>只推进、不持有</b>：孵化状态的唯一实例归主线
+ *       {@code com.orbcraft.fabric.runtime.OrbcraftRuntime.hatch()}，
+ *       S2 提交票、S1 投掷、S4 恢复、本包推进必须落在同一份状态上。</li>
  *   <li><b>越权拦截</b>：{@link com.orbcraft.fabric.server.ThrowGuard} 在
  *       {@code ItemEvents.USE}（{@code Item.use} 之前）问一次
  *       {@code OrbItemContract.checkThrow}，拒绝时给中文原因并吃掉这次使用。

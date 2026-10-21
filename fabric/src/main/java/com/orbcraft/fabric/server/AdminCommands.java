@@ -15,6 +15,7 @@ import com.orbcraft.core.quota.QuotaManager;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.PlayerStore;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -95,7 +96,7 @@ final class AdminCommands {
             return 0;
         }
 
-        Optional<HatchTicket> found = HatchRuntime.incubation().ticket(ticketId);
+        Optional<HatchTicket> found = OrbcraftRuntime.hatch().ticket(ticketId);
         if (found.isEmpty()) {
             source.sendFailure(Component.literal("查不到票据「" + ticketId + "」，先用 /orbadmin quota 确认在途票据"));
             return 0;
@@ -146,7 +147,7 @@ final class AdminCommands {
         }
 
         String ownerKey = PlayerStore.ownerKeyOf(target.getUUID());
-        QuotaManager.State state = HatchRuntime.incubation().stateOf(ownerKey);
+        QuotaManager.State state = OrbcraftRuntime.hatch().stateOf(ownerKey);
         int inflight = HatchRuntime.inFlight(ownerKey).size();
         String name = target.getName().getString();
 
@@ -154,7 +155,7 @@ final class AdminCommands {
                 + " · 主宠 " + state.primary() + "/" + QuotaManager.MAX_PRIMARY
                 + " · 混乱 " + state.chaos() + "/" + QuotaManager.MAX_CHAOS
                 + " · 统御力 " + state.usedPoints() + "/" + QuotaManager.POOL_SIZE
-                + " · 在途 " + inflight + "/" + HatchRuntime.incubation().maxConcurrent()), false);
+                + " · 在途 " + inflight + "/" + OrbcraftRuntime.hatch().maxConcurrent()), false);
         source.sendSuccess(() -> Component.literal("ownerKey：" + ownerKey), false);
         return 1;
     }
@@ -187,13 +188,13 @@ final class AdminCommands {
 
         String ownerKey = PlayerStore.ownerKeyOf(target.getUUID());
         String name = target.getName().getString();
-        QuotaManager.State before = HatchRuntime.incubation().stateOf(ownerKey);
+        QuotaManager.State before = OrbcraftRuntime.hatch().stateOf(ownerKey);
 
         IncubationService.RestoreResult result;
         try {
             // 传空票据列表：restore 只改配额，不动已在服务里的票据（同一 id 重复写入会抛异常，
             // 所以这里刻意不把当前票据再喂回去）。
-            result = HatchRuntime.incubation().restore(
+            result = OrbcraftRuntime.hatch().restore(
                     new HatchSnapshot(ownerKey, QuotaManager.State.empty(), List.of()));
         } catch (RuntimeException e) {
             OrbcraftMod.LOG.error("[orbcraft] 重算配额失败 · {}：{}", ownerKey, e.toString(), e);

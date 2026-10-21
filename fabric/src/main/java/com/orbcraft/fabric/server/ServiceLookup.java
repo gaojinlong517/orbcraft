@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.OrbItemContract;
+import com.orbcraft.fabric.contract.PlayerStore;
 import com.orbcraft.fabric.contract.Services;
 
 /**
@@ -34,6 +35,11 @@ final class ServiceLookup {
     /** @return 未注册时为 {@code null}，调用方必须判空 */
     static OrbItemContract orbItem() {
         return orNull(Services::orbItem, "OrbItemContract（S1 orb-item）");
+    }
+
+    /** @return 未注册时为 {@code null}，调用方必须判空 */
+    static PlayerStore playerStore() {
+        return orNull(Services::playerStore, "PlayerStore（S4 persistence）");
     }
 
     private static <T> T orNull(Supplier<T> getter, String name) {

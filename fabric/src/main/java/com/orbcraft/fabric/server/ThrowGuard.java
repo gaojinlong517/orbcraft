@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.PlayerStore;
+import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -131,7 +132,7 @@ final class ThrowGuard {
      * {@code ownerKey} 才能回答「这是谁的球、他是不是换过号」。
      */
     private static void deny(ServerPlayer player, String reason) {
-        long now = HatchRuntime.nowTick(player);
+        long now = OrbcraftRuntime.nowTick(player.level().getServer());
         Long last = LAST_DENY.get(player.getUUID());
         if (last != null && now - last < DENY_COOLDOWN_TICKS && now >= last) {
             return;
@@ -150,7 +151,7 @@ final class ThrowGuard {
      * 断线：只清缓存，<b>不碰票据</b>。
      *
      * <p>「掉线时在孵的球不复位」的实现方式就是「什么都不做」——
-     * 票据活在 {@code HatchRuntime.incubation()} 里，与玩家连接无关；
+     * 票据活在 {@code OrbcraftRuntime.hatch()} 里，与玩家连接无关；
      * 提前结算或重置只会让重连后的进度跳变。这里打一行日志，
      * 是为了让验收时能从服务端日志证明「掉线前后在途数量一致」。
      */
