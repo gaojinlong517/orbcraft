@@ -1,7 +1,12 @@
 package com.orbcraft.fabric.entity.orb;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import com.orbcraft.core.hatch.HatchException;
 import com.orbcraft.core.hatch.HatchTicket;
+import com.orbcraft.core.render.ModelCapability;
 import com.orbcraft.core.spec.Spec;
 import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.Services;
@@ -50,11 +55,20 @@ public final class OrbProjectile extends ThrowableItemProjectile {
      */
     private static final int MAX_FLIGHT_TICKS = 20 * 30;
 
+    /** 已经收到过「外观降级」提示的玩家。见 {@link #tellAppearance}。 */
+    private static final Set<UUID> APPEARANCE_WARNED = ConcurrentHashMap.newKeySet();
+
     private static final String TAG_TICKET = "TicketId";
     private static final String TAG_OWNER = "OwnerKey";
 
     /** 票据 id。落地的唯一依据，缺失时这颗实体什么都不做。 */
     private String ticketId = "";
+
+    /**
+     * 落地已开始。命中回调与超时兜底都可能在同一 tick 触发，
+     * {@code isRemoved()} 要等到 {@code discard()} 之后才为真，中间这段用这个标记挡住重入。
+     */
+    private boolean landed;
 
     /**
      * 归属。不从 {@code getOwner()} 现取：落地时主人可能已经下线或换了维度，
@@ -110,11 +124,11 @@ public final class OrbProjectile extends ThrowableItemProjectile {
     protected void onHit(HitResult hit) {
         super.onHit(hit);
         // 命中点在方块表面上，而实体有 0.35 的碰撞箱，直接用交点会让召唤物陷进方块里。
-        // 沿命中面的法向推 0.2 格，让落点站在方块外侧 —— 贴地/避障是 S3 的边界之外，
-        // 落点该怎么给由调用方负责。
+        // 沿命中面的法向推 0.3 格（大于碰撞箱半宽 0.175），让落点站在方块外侧 ——
+        // 贴地/避障是 S3 的边界之外，落点该怎么给由调用方负责。
         Vec3 pos = hit.getLocation();
         if (hit instanceof BlockHitResult blockHit) {
-            pos = pos.add(blockHit.getDirection().getUnitVec3().scale(0.2D));
+            pos = pos.add(blockHit.getDirection().getUnitVec3().scale(0.3D));
         }
         this.land(pos);
     }
@@ -126,9 +140,10 @@ public final class OrbProjectile extends ThrowableItemProjectile {
      * 症状是「服务器卡一下然后这个操作消失了」。
      */
     private void land(Vec3 pos) {
-        if (this.level().isClientSide() || this.isRemoved()) {
+        if (this.level().isClientSide() || this.isRemoved() || this.landed) {
             return;
         }
+        this.landed = true;
         ServerLevel level = (ServerLevel) this.level();
 
         // 球物品就是票据的载体：飞行中被 /kill 或重启打断时，这是唯一还活着的证据。
@@ -165,9 +180,22 @@ public final class OrbProjectile extends ThrowableItemProjectile {
             return;
         }
 
+        // 票据已经落地：标脏让存档在几秒内落盘。崩服时若没有这条，配额与票据会退回
+        // 「已投出但没落地」，产物与配额对不上，而日志里什么都看不到。
+        markDirtyQuietly();
+
         // 服务里的票据是唯一真相，球上那份只在服务查不到时兜底。
         summon(level, pos, OrbcraftRuntime.hatch().ticket(id).orElse(carried));
         this.discard();
+    }
+
+    /** 标脏。S4 未接线时静默跳过：那说明整条存档链路都不在，喊一声也没有接收方。 */
+    private void markDirtyQuietly() {
+        try {
+            Services.playerStore().markDirty(this.ownerKey);
+        } catch (IllegalStateException e) {
+            // 内存状态照样推进，只是这次迁移不会立刻落盘。
+        }
     }
 
     /**
@@ -193,8 +221,36 @@ public final class OrbProjectile extends ThrowableItemProjectile {
             tell("落地失败：" + result.reason());
             return;
         }
-        // 外观降级提示由 S3 在 spawn 内部发给在线主人，这里不再重复发 ——
-        // 同一次召唤弹两条一模一样的「外观已降级」，玩家会以为出了两次问题。
+        // 外观降级的唯一发送方是这里。S3 只负责如实报「玩家实际看到」的等级，不发消息 ——
+        // 24/35 个载体没有烘焙模型，如果谁都不说，玩家看到的是一只奇怪的僵尸，
+        // 结论会是「这模组有 bug」，而不是「美术还没做完」。
+        if (result.appearance().shouldWarnPlayer()) {
+            tellAppearance(spec, result.appearance());
+        }
+    }
+
+    /**
+     * 每人每局只提示一次外观降级。
+     *
+     * <p>现在没有任何 BetterModel 适配器，{@code capability()} 恒为 {@code NAMED_VANILLA}，
+     * 也就是<b>每只</b>召唤物都会降级。逐只提示会立刻变成刷屏噪声，玩家反过来会关掉提示。
+     * 这份集合刻意不落盘：重启后每人再收到一次是可接受的代价，换来的是不写存档。
+     */
+    private void tellAppearance(Spec spec, ModelCapability capability) {
+        if (!(this.getOwner() instanceof ServerPlayer player)) {
+            // 投掷者不在线就不发，也不记「已提示」—— 否则他一辈子都收不到。
+            return;
+        }
+        String name = spec.displayName();
+        String message = switch (capability) {
+            case NAMED_VANILLA -> "「" + name + "」的外观模型没打包，这次先用原版形态代替，数值不受影响";
+            case NONE -> "「" + name + "」的外观完全用不了，这次召唤物是隐形的，数值不受影响";
+            case FULL -> null;
+        };
+        if (message == null || !APPEARANCE_WARNED.add(player.getUUID())) {
+            return;
+        }
+        player.displayClientMessage(Component.literal(message), true);
     }
 
     private void tell(String message) {

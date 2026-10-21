@@ -6,6 +6,7 @@ import com.orbcraft.core.hatch.HatchException;
 import com.orbcraft.core.hatch.HatchTicket;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.PlayerStore;
+import com.orbcraft.fabric.contract.Services;
 import com.orbcraft.fabric.entity.orb.OrbEntities;
 import com.orbcraft.fabric.entity.orb.OrbProjectile;
 import com.orbcraft.fabric.runtime.OrbcraftRuntime;
@@ -101,6 +102,11 @@ public final class OrbItem extends Item {
             player.displayClientMessage(Component.literal(throwReason(e, ticket, nowTick)), true);
             return;
         }
+
+        // 票据已经 THROWN：标脏让存档在几秒内落盘。少了这一下，崩服会把球退回 READY，
+        // 而物品已经从背包扣掉 —— 玩家的产物就这样静默消失。
+        // 只用 markDirty 不用同步写盘：这里在右键回调里，同步 IO 会卡 tick。
+        Services.playerStore().markDirty(PlayerStore.ownerKeyOf(player.getUUID()));
 
         // 无条件扣，创造模式也扣。原版投掷物在创造下不消耗，但那是因为它们没有状态；
         // 球的票据已经 THROWN，留在背包里就是一颗「看得见、扔不动」的死球，
