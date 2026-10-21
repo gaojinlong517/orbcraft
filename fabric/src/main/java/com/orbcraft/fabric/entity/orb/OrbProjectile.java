@@ -150,6 +150,11 @@ public final class OrbProjectile extends ThrowableItemProjectile {
         HatchTicket carried = OrbItems.CONTRACT.readOrb(this.getItem()).orElse(null);
         String id = carried != null ? carried.ticketId() : this.ticketId;
         if (id.isEmpty()) {
+            // 球上没票、实体上也没票：这颗投掷物从来就不是一颗合法的球（作弊/坏存档）。
+            // 唯一一条「什么都不做」的出口，也必须留一句 —— 否则玩家只看到球飞出去没了。
+            OrbcraftMod.LOG.warn("[orbcraft] 投掷物落地时既没有球上票据也没有 ticketId，按无效产物丢弃：{}",
+                    this.position());
+            tell("这颗球的记录坏了，没能落地");
             this.discard();
             return;
         }
@@ -161,6 +166,7 @@ public final class OrbProjectile extends ThrowableItemProjectile {
             if (e.code() != HatchException.Code.UNKNOWN_TICKET) {
                 // 未投出就落地 / 票据已失效：真正的状态错乱，记日志并让球消失比留在世界里安全。
                 OrbcraftMod.LOG.warn("[orbcraft] 球落地被拒（{}）：{}", e.code(), e.getMessage());
+                tell("这颗球没能落地（状态异常），请联系管理员");
                 this.discard();
                 return;
             }
