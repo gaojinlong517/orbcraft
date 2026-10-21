@@ -30,7 +30,7 @@ import net.minecraft.world.item.ItemStack;
  * <p>为什么这些命令不放在 S2 的构筑命令里：S2 的入口是玩法（四层确认制、发牌、确认后才扣配额），
  * 这些是<b>运维手段</b>（赔付、查账、清理脏配额）。两者权限等级不同、失败原因不同、
  * 面向的人也不同，混在一个根节点下会让「玩家敲错命令看到管理员提示」。
- * 所以这里用独立根 {@code /orbadmin}，与 S2 的 {@code /orbcraft} 互不覆盖 ——
+ * 所以这里用独立根 {@code /orbadmin}，与 S2 的 {@code /orb} 互不覆盖 ——
  * 命令注册在启动期是独占的，两个包抢同一个根会在 {@code CommandDispatcher} 里报重复字面量。
  *
  * <p>三条命令都按<b>权限等级</b>放行（见 {@link AdminPermissions}），不做玩家名白名单。
