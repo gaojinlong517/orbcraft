@@ -26,6 +26,25 @@ import java.util.Set;
  *       WARN，因为它意味着「卡表与落地器已经不同步」。</li>
  * </ul>
  *
+ * <p><b>单位模型（最容易搞错的地方，改表前必读）</b>：卡表里混着两套单位，
+ * 靠 desc 里有没有 {@code %} 区分，混用会让数值差好几倍：
+ * <pre>
+ * 最终值 = (代理实体基础值 + 绝对值加成) × (1 + 百分比加成 / 100)
+ * </pre>
+ * <ul>
+ *   <li><b>加法组</b>（desc 不带 %）：{@code damage}「伤害 +2」、{@code maxHealth}「生命上限 +2」、
+ *       {@code armor}「护甲 +1」、{@code summonArmor}「召唤护甲 +2」、{@code knockback}、{@code reach}。</li>
+ *   <li><b>乘法组</b>（desc 带 %）：{@code summonHealth}「召唤生命 +10%」、
+ *       {@code summonDamage}「召唤攻击 +8%」、{@code moveSpeed} / {@code summonSpeed} /
+ *       {@code attackSpeed} / {@code elemDamage} / {@code elemSummonDamage}。</li>
+ *   <li><b>先加后乘</b>：先给底子加固定值，再按比例放大。反过来会把「+2 血量」
+ *       在小体量代理（蝙蝠、鹦鹉）上稀释掉，而那正是它最该起作用的地方。</li>
+ * </ul>
+ * 之所以以代理实体的基础值为基，是因为乘法组的键是<b>强化比例</b>：
+ * 没有「被强化的对象」时，一条 +10% 就是在凭空造数值（僵尸 20×1.4=28 才是本意）。
+ * 本模型是 team-lead 在 2026-10-21 纠正派单书之后定下的；派单书原句
+ * 「血量 = maxHealth + summonHealth」把两套单位混成了一个加法，已作废。
+ *
  * <p><b>已知数据限制（S3 不修，记录在此）</b>：{@code elemDamage} /
  * {@code elemResist} / {@code elemSummonDamage} 这类元素键由
  * {@code SpecSettler} 取 id 的第二段得到，而元素维度写在第三段
@@ -35,13 +54,6 @@ import java.util.Set;
  * 该元素的增伤整体加上去，做不到「火 +10%、雷 +20%」分开算。
  * 真正的修法在 {@code SpecSettler} 的键规则（需要主线的数据层决策），
  * 不要在 S3 里给 attrs 补一个假的元素维度。
- *
- * <p><b>另一处数据/文档冲突</b>：卡表 desc 把 {@code summonHealth} 写成
- * 「召唤生命 +10%」（百分比），但派单书的验收式子是
- * {@code 血量 = maxHealth + summonHealth}（绝对相加）。两者不能同时成立，
- * 本轮按<b>派单书的绝对相加</b>实现 —— 已结算的 attrs 本来就是绝对量
- * （{@code damage} 的 desc 是「伤害 +2」），混进一个百分比会让同一个 map
- * 里出现两种单位。这条要由数据侧统一，不要在这里悄悄乘一个 0.01。
  *
  * <p>线程安全：全静态不可变表，可并发读。
  */
@@ -55,8 +67,12 @@ public final class SummonAttrMap {
 
     /** 一条属性键最终落到哪个实体属性上，以及乘多少。 */
     public enum Target {
+        /** 绝对值加成：加到代理实体自带的基础上。 */
         HEALTH_FLAT,
+        /** 强化比例：乘在「基础值 + 绝对值加成」之上。 */
+        HEALTH_PCT,
         DAMAGE_FLAT,
+        DAMAGE_PCT,
         /** 按当前伤害的百分比加，只在该 Spec 有元素标签时才生效（见类注释的元素限制）。 */
         ELEMENT_DAMAGE_PCT,
         ARMOR_FLAT,
@@ -92,10 +108,9 @@ public final class SummonAttrMap {
      */
     private static final Map<String, Rule> WIRED = Map.ofEntries(
             Map.entry("damage", Rule.flat(Target.DAMAGE_FLAT)),
-            Map.entry("summonDamage", Rule.flat(Target.DAMAGE_FLAT)),
+            Map.entry("summonDamage", Rule.pct(Target.DAMAGE_PCT, "desc 为「召唤攻击 +8%」")),
             Map.entry("maxHealth", Rule.flat(Target.HEALTH_FLAT)),
-            Map.entry("summonHealth", Rule.flat(Target.HEALTH_FLAT,
-                    "派单书验收要求绝对相加，不按卡表 desc 的百分比解释")),
+            Map.entry("summonHealth", Rule.pct(Target.HEALTH_PCT, "desc 为「召唤生命 +10%」")),
             Map.entry("armor", Rule.flat(Target.ARMOR_FLAT)),
             Map.entry("summonArmor", Rule.flat(Target.ARMOR_FLAT)),
             Map.entry("moveSpeed", Rule.pct(Target.MOVE_SPEED_PCT, "desc 为「移速 +3%」")),
@@ -216,7 +231,9 @@ public final class SummonAttrMap {
 
         SummonStats stats = new SummonStats(
                 acc.getOrDefault(Target.HEALTH_FLAT, NOT_SET),
+                acc.getOrDefault(Target.HEALTH_PCT, 0.0),
                 acc.getOrDefault(Target.DAMAGE_FLAT, NOT_SET),
+                acc.getOrDefault(Target.DAMAGE_PCT, 0.0),
                 acc.getOrDefault(Target.ARMOR_FLAT, 0.0),
                 acc.getOrDefault(Target.MOVE_SPEED_PCT, 0.0),
                 acc.getOrDefault(Target.ATTACK_SPEED_PCT, 0.0),

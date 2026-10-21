@@ -206,7 +206,7 @@ public final class VanillaSummonSpawner implements SummonSpawner {
         mob.setCustomName(Component.literal(spec.displayName()));
         mob.setCustomNameVisible(true);
 
-        // ---- 数值：maxHealth + summonHealth、damage + summonDamage 等
+        // ---- 数值：(代理基础值 + 绝对值加成) × (1 + 百分比加成)；单位模型见 SummonStats 类注释
         boolean hasElement = SpecTags.hasElement(spec.tags());
         SummonAttrMap.Resolution resolution = SummonAttrMap.resolve(spec.attrs(), hasElement);
         SummonStats.ApplyReport applied = resolution.stats().applyTo(mob);

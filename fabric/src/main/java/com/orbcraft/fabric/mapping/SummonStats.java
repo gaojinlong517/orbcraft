@@ -14,23 +14,41 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
  *
  * <p>在链路里的位置：{@link SummonAttrMap#resolve} 产出本对象，
  * {@code VanillaSummonSpawner} 在实体还没进世界时调 {@link #applyTo}。
- * 把「算」和「写」分开，是因为算的部分可以单测，写的部分只能靠实体。
+ * 把「算」和「写」分开，是因为算的部分可以离线跑，写的部分只能靠实体。
  *
- * <p><b>两条取舍写在字段上，不要改回去</b>：
+ * <h2>单位模型（改映射表之前先读这段）</h2>
+ * 卡表里有两套单位，靠 desc 区分，混用会让数值差好几倍：
+ * <pre>
+ * 最终值 = (代理实体基础值 + 绝对值加成) × (1 + 百分比加成 / 100)
+ * </pre>
  * <ul>
- *   <li>血量与攻击力是<b>绝对量覆盖</b>（不是加在代理实体自己的默认值上）。
- *       派单书的验收式子是 {@code 血量 = maxHealth + summonHealth}，
- *       若再叠加代理实体自带的 20 点血，同一个 Spec 换个代理就是另一个数值，
- *       玩家的「我的构筑数值」就失去了意义。</li>
- *   <li>移速/攻速是<b>百分比</b>（卡表 desc 写的就是百分比），而且乘在代理实体
- *       默认值上 —— 因为 1.21 的速度属性换算成人格化单位没有可读的绝对刻度。</li>
+ *   <li><b>加法组</b>（desc 不带 %）：{@code damage}「伤害 +2」、{@code maxHealth}「生命上限 +2」、
+ *       {@code armor}「护甲 +1」、{@code summonArmor}「召唤护甲 +2」、{@code knockback}、
+ *       {@code reach}。它们加到代理实体自带的底子上。</li>
+ *   <li><b>乘法组</b>（desc 带 %）：{@code summonHealth}「召唤生命 +10%」、
+ *       {@code summonDamage}「召唤攻击 +8%」、{@code moveSpeed} / {@code summonSpeed} /
+ *       {@code attackSpeed} / {@code elemDamage} / {@code elemSummonDamage}。
+ *       它们是<b>强化比例</b>，必须有一个被强化的对象 —— 那个对象只能是代理实体本身。</li>
+ *   <li><b>顺序是先加后乘</b>：先给底子加固定值，再按比例放大。
+ *       反过来（先乘后加）会让「+2 血量」在小体量代理上被稀释，
+ *       而卡表里小体量代理（蝙蝠、鹦鹉）恰恰是最需要那 +2 的地方。</li>
  * </ul>
+ *
+ * <p>为什么以代理实体的基础值为基（而不是从 0 起算）：{@code summonHealth} 是百分比。
+ * 如果不存在「基础血量」这个概念，一条 +10% 就是在凭空造数值 ——
+ * 僵尸 20 血 × 1.4 = 28 是数据本意；「从 0 起算再 +10%」只能得到 0。
+ *
+ * <p><b>同一张表里两类键混用时的示例</b>：僵尸（基础 20 血 / 3 攻）+ {@code maxHealth 60}
+ * + {@code summonHealth 40} → (20+60)×1.4 = 112 血；{@code damage 12} + {@code summonDamage 8}
+ * → (3+12)×1.08 = 16.2 攻。
  *
  * <p>不可变。
  */
 public record SummonStats(
-        double health,
-        double damage,
+        double healthFlat,
+        double healthPct,
+        double damageFlat,
+        double damagePct,
         double armor,
         double moveSpeedPct,
         double attackSpeedPct,
@@ -56,13 +74,14 @@ public record SummonStats(
 
         boolean healthSet = false;
         int healthValue = 0;
-        if (!Double.isNaN(health)) {
+        if (!Double.isNaN(healthFlat) || healthPct != 0.0) {
             AttributeInstance hp = entity.getAttribute(Attributes.MAX_HEALTH);
             if (hp == null) {
                 skipped.add("maxHealth");
             } else {
-                double v = clamp(health, 1.0, 2048.0);
-                hp.setBaseValue(v);
+                double flat = Double.isNaN(healthFlat) ? 0.0 : healthFlat;
+                double v = (hp.getBaseValue() + flat) * (1.0 + healthPct);
+                hp.setBaseValue(clamp(v, 1.0, 2048.0));
                 healthValue = Math.round(entity.getMaxHealth());
                 // 必须补满：实体是在 setBaseValue 之前构造的，血量还是旧上限
                 entity.setHealth(entity.getMaxHealth());
@@ -72,24 +91,16 @@ public record SummonStats(
 
         boolean damageSet = false;
         int damageValue = 0;
-        if (!Double.isNaN(damage)) {
+        if (!Double.isNaN(damageFlat) || damagePct != 0.0 || elementDamagePct != 0.0) {
             AttributeInstance dmg = entity.getAttribute(Attributes.ATTACK_DAMAGE);
             if (dmg == null) {
                 skipped.add("damage");
             } else {
-                double v = damage * (1.0 + elementDamagePct);
+                double flat = Double.isNaN(damageFlat) ? 0.0 : damageFlat;
+                // 元素增伤与通用增伤各乘一次：它们是两个独立的百分比来源
+                double v = (dmg.getBaseValue() + flat) * (1.0 + damagePct) * (1.0 + elementDamagePct);
                 dmg.setBaseValue(clamp(v, 0.0, 2048.0));
-                damageValue = (int) Math.round(dmg.getValue());
-                damageSet = true;
-            }
-        } else if (elementDamagePct != 0.0) {
-            // 只有元素增伤、没有基础伤害：加在代理实体自带伤害上
-            AttributeInstance dmg = entity.getAttribute(Attributes.ATTACK_DAMAGE);
-            if (dmg == null) {
-                skipped.add("elemDamage");
-            } else {
-                dmg.setBaseValue(dmg.getBaseValue() * (1.0 + elementDamagePct));
-                damageValue = (int) Math.round(dmg.getValue());
+                damageValue = Math.round((float) dmg.getValue());
                 damageSet = true;
             }
         }
