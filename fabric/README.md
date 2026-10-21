@@ -61,16 +61,35 @@ Minecraft **1.21.11** / Java **21** 的 Fabric 模组。算法与数据在 `../c
 eula=true
 ```
 
-验证骨架是否真的通了（以下为实测输出）：
+验证骨架是否真的通了（以下都是实测输出，不是「应该能跑」）：
 
 ```
+# 服务端
 [FabricLoader] Loading 43 mods:            ← 其余 42 个是 fabric-api 的各模块
 	- orbcraft 0.1.0-SNAPSHOT
 [orbcraft] 初始化完成 · 环境 SERVER · Java 21
 [Server thread] Done (6.168s)! For help, type "help"
+
+# 客户端
+	- orbcraft 0.1.0-SNAPSHOT
+[orbcraft] 初始化完成 · 环境 CLIENT · Java 21
+[orbcraft] 客户端初始化完成
+Backend library: LWJGL version 3.3.3-snapshot
+Sound engine started
+Created: 1024x1024x0 minecraft:textures/atlas/gui.png-atlas   ← 到主菜单
 ```
 
-客户端则会在启动时打印 `[orbcraft] 客户端初始化完成`。
+客户端首次跑之前会先执行 `downloadAssets`（约 443 MB），这一步和启动分成两个
+Gradle 任务，网络慢时建议先单独跑 `./gradlew downloadAssets`，别让它在
+`runClient` 的超时预算里耗掉。
+
+客户端日志里 `Could not authorize you against Realms server` 是开发账号未登录
+导致的，与模组无关，可以忽略。
+
+> **并行开发时不要各自跑 `./gradlew`**：五个 Gradle 守护进程同时驻留约 7–8 GB，
+> 共享 `~/.gradle` 缓存锁还会互相等待。五路各自用 `tools/fast-compile.sh`
+> （纯 javac，约 30 秒、零常驻内存）做编译检查，`runClient` / `runServer`
+> 只在主线单点执行。
 
 ## 源码布局
 
