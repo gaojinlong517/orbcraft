@@ -12,24 +12,27 @@ import java.util.List;
  * 就会出现「UI 正读到一半，玩家又点了一下」的错乱。快照是不可变的，
  * 一次渲染只看到一致的一帧。
  *
- * <p>{@code requiredDescPick} / {@code requiredEffectPick} / {@code carrierSlots}
+ * <p>{@code requiredShapePick} / {@code requiredModifierPick} / {@code requiredEffectPick}
  * 三个数必须一起下发：客户端要自己判断「确认按钮能不能点」，
  * 如果只发候选不发规则，客户端只能盲猜，最后靠服务端拒绝来纠正 ——
  * 玩家看到的是「点了没反应」，而不是「还差一张」。
  *
- * @param phase              当前阶段
- * @param kind               已选类型；未选时为 {@code null}
- * @param typeOptions        类型层的三个候选（其他层也下发，UI 可回显）
- * @param cards              当前层候选卡；类型层为空
- * @param chosen             当前层已选索引（升序）
- * @param requiredDescPick   描述层应选张数
- * @param requiredEffectPick 效果层应选张数
- * @param carrierSlots       描述层要求的载体张数
- * @param canConfirm         当前能否确认
- * @param confirmHint        还差什么；已满足为空串
- * @param confirmedCards     已确认的卡（跨层累计）
- * @param composition        已完成时非空
- * @param seed               随机种子（投诉回放用）
+ * <p>四层用同一套字段而不是「一层一个专用包」，是因为客户端只有一屏卡牌界面，
+ * 每层切换只是换 {@code cards} 和 {@code requiredPickCount()}，没有额外状态。
+ *
+ * @param phase                  当前阶段
+ * @param kind                   已选类型；未选时为 {@code null}
+ * @param typeOptions            类型层的三个候选（其他层也下发，UI 可回显）
+ * @param cards                  当前层候选卡；类型层为空
+ * @param chosen                 当前层已选索引（升序）
+ * @param requiredShapePick      形态层应选张数（恒为 1）
+ * @param requiredModifierPick   修饰层应选张数
+ * @param requiredEffectPick     效果层应选张数
+ * @param canConfirm             当前能否确认
+ * @param confirmHint            还差什么；已满足为空串
+ * @param confirmedCards         已确认的卡（跨层累计，顺序为 形态 → 修饰 → 效果）
+ * @param composition            已完成时非空
+ * @param seed                   随机种子（投诉回放用）
  */
 public record BuildSnapshot(
         BuildPhase phase,
@@ -37,9 +40,9 @@ public record BuildSnapshot(
         List<TypeOption> typeOptions,
         List<DraftCard> cards,
         List<Integer> chosen,
-        int requiredDescPick,
+        int requiredShapePick,
+        int requiredModifierPick,
         int requiredEffectPick,
-        int carrierSlots,
         boolean canConfirm,
         String confirmHint,
         List<DraftCard> confirmedCards,
@@ -55,10 +58,11 @@ public record BuildSnapshot(
         confirmedCards = confirmedCards == null ? List.of() : List.copyOf(confirmedCards);
     }
 
-    /** 当前层要求选几张 —— UI 把这个数显示成「2 / 5」。 */
+    /** 当前层要求选几张 —— UI 把这个数显示成「1 / 5」。 */
     public int requiredPickCount() {
         return switch (phase) {
-            case DESC_CHOOSING, DESC_CONFIRMING -> requiredDescPick;
+            case SHAPE_CHOOSING, SHAPE_CONFIRMING -> requiredShapePick;
+            case MODIFIER_CHOOSING, MODIFIER_CONFIRMING -> requiredModifierPick;
             case EFFECT_CHOOSING, EFFECT_CONFIRMING -> requiredEffectPick;
             default -> 0;
         };
@@ -68,7 +72,7 @@ public record BuildSnapshot(
         return phase == BuildPhase.FINISHED;
     }
 
-    /** 一行状态栏文案，如「描述卡层 2/5 已选 · 可确认」。 */
+    /** 一行状态栏文案，如「修饰层 0/1 · 可确认」。 */
     public String statusLine() {
         if (phase.isTerminal()) {
             return phase == BuildPhase.FINISHED ? "已定稿" : "已放弃";

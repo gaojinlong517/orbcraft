@@ -8,10 +8,18 @@ import java.util.Map;
 /**
  * 构筑流程的全部可调参数。
  *
+ * <h2>四层，每层一对「候选数 / 选取数」</h2>
+ * <pre>
+ * 类型层  3 选 1（固定，不可配）
+ * 形态层  shapeDealCount    选 SHAPE_PICK
+ * 修饰层  modifierDealCount 选 modifierPickCount
+ * 效果层  effectDealCount   选 effectPickCount
+ * </pre>
+ *
  * <p><b>候选数与选取数是两个独立的量，不能合并。</b>
- * 需求里「共 5 张描述卡牌」说的是<b>候选</b>张数（玩家看到 5 张），
+ * 需求里「共 5 张卡牌」说的是<b>候选</b>张数（玩家看到 5 张），
  * 而玩家最终拿走几张是另一件事。合成一个 {@code drawCount} 会直接锁死
- * 「5 张里挑 2 张」这种最基本的手感，也无法做「困难模式发 3 张」。
+ * 「5 张里挑 1 张」这种最基本的手感，也无法做「困难模式发 3 张」。
  *
  * <p><b>没有预算，也没有点数扣减。</b> 这是与 {@code draft.DraftConfig}
  * 最根本的区别：那边 {@code budget} 是硬上限，选牌要够点数才买得起；
@@ -19,27 +27,29 @@ import java.util.Map;
  * 强度控制因此从「你投入多少点数」转成「你抽到多好的品质」，
  * 也就是需求里那条「非交易型随机构筑」。
  *
- * @param descDealCount      描述卡层候选张数（默认 5）
- * @param descPickCount      描述卡层必须选取张数（默认 2）
- * @param descCarrierSlots   描述卡候选里固定保留的载体张数（默认 1）
+ * @param shapeDealCount     形态层候选张数（默认 5）
+ * @param modifierDealCount  修饰层候选张数（默认 5）
+ * @param modifierPickCount  修饰层必须选取张数（默认 1）
  * @param effectDealCount    效果层候选张数（默认 5）
  * @param effectPickCount    效果层必须选取张数（默认 1）
  * @param qualityWeights     品质抽取权重
- * @param descFloor          描述卡层保底品质（默认白 = 不保底）
- * @param effectFloor        效果层保底品质（默认白 = 不保底）
+ * @param shapeFloor         形态层保底品质（默认白 = 不保底）
+ * @param modifierFloor      修饰层保底品质
+ * @param effectFloor        效果层保底品质
  * @param commonAvgMax       平均点数不超过它 → 普通
  * @param rareAvgMax         平均点数不超过它 → 稀有
  * @param epicAvgMax         平均点数不超过它 → 史诗，超过即传说
  * @param extraCardHatchPct  每多带 1 张卡，孵化时长额外增加的百分比（默认 0.15）
  */
 public record BuildConfig(
-        int descDealCount,
-        int descPickCount,
-        int descCarrierSlots,
+        int shapeDealCount,
+        int modifierDealCount,
+        int modifierPickCount,
         int effectDealCount,
         int effectPickCount,
         Map<Tier, Integer> qualityWeights,
-        Tier descFloor,
+        Tier shapeFloor,
+        Tier modifierFloor,
         Tier effectFloor,
         double commonAvgMax,
         double rareAvgMax,
@@ -51,28 +61,25 @@ public record BuildConfig(
     public static final int MIN_DEAL = 3;
     public static final int MAX_DEAL = 9;
 
+    /**
+     * 形态层固定只选 1 张 —— <b>不是懒得做成可配，是语义上不能多选。</b>
+     *
+     * <p>一件产物只有一个形体：一张外观 key、一套动画、一个碰撞箱。
+     * 允许选 2 张形态，{@code Composition} 就得回答「枪 + 法杖到底是哪个模型」，
+     * 而这个问题在渲染层没有正确答案。所以这里不给开关，只给常量。
+     *
+     * <p>要「一次造两件」是另一个需求（两件独立产物），不该靠放宽这里实现。
+     */
+    public static final int SHAPE_PICK = 1;
+
     public BuildConfig {
-        if (descDealCount < MIN_DEAL || descDealCount > MAX_DEAL) {
+        checkDealRange("shapeDealCount", shapeDealCount);
+        checkDealRange("modifierDealCount", modifierDealCount);
+        checkDealRange("effectDealCount", effectDealCount);
+
+        if (modifierPickCount < 1 || modifierPickCount > modifierDealCount) {
             throw new BuildException(BuildException.Code.BAD_CONFIG,
-                    "descDealCount 应在 " + MIN_DEAL + "~" + MAX_DEAL + " 之间：" + descDealCount);
-        }
-        if (effectDealCount < MIN_DEAL || effectDealCount > MAX_DEAL) {
-            throw new BuildException(BuildException.Code.BAD_CONFIG,
-                    "effectDealCount 应在 " + MIN_DEAL + "~" + MAX_DEAL + " 之间：" + effectDealCount);
-        }
-        if (descCarrierSlots < 1) {
-            throw new BuildException(BuildException.Code.BAD_CONFIG,
-                    "descCarrierSlots 至少为 1：没有载体的产物无法生成外观");
-        }
-        // 载体位必须严格少于选取数，否则玩家只能选载体，描述层退化成「再点一次确认」
-        if (descPickCount <= descCarrierSlots) {
-            throw new BuildException(BuildException.Code.BAD_CONFIG,
-                    "descPickCount(" + descPickCount + ") 必须大于 descCarrierSlots("
-                            + descCarrierSlots + ")，否则描述层没有任何可搭配的属性/元素");
-        }
-        if (descPickCount > descDealCount) {
-            throw new BuildException(BuildException.Code.BAD_CONFIG,
-                    "descPickCount(" + descPickCount + ") 不能超过 descDealCount(" + descDealCount + ")");
+                    "modifierPickCount 应在 1~" + modifierDealCount + " 之间：" + modifierPickCount);
         }
         if (effectPickCount < 1 || effectPickCount > effectDealCount) {
             throw new BuildException(BuildException.Code.BAD_CONFIG,
@@ -102,15 +109,26 @@ public record BuildConfig(
         if (total <= 0) {
             throw new BuildException(BuildException.Code.BAD_CONFIG, "品质权重总和必须大于 0");
         }
-        descFloor = descFloor == null ? Tier.WHITE : descFloor;
+        shapeFloor = shapeFloor == null ? Tier.WHITE : shapeFloor;
+        modifierFloor = modifierFloor == null ? Tier.WHITE : modifierFloor;
         effectFloor = effectFloor == null ? Tier.WHITE : effectFloor;
     }
 
+    private static void checkDealRange(String name, int value) {
+        if (value < MIN_DEAL || value > MAX_DEAL) {
+            throw new BuildException(BuildException.Code.BAD_CONFIG,
+                    name + " 应在 " + MIN_DEAL + "~" + MAX_DEAL + " 之间：" + value);
+        }
+    }
+
     /**
-     * 默认配置：描述层发 5 选 2（其中 1 张必是载体），效果层发 5 选 1。
+     * 默认配置：三层各发 5 张，每层选 1 张。
      *
-     * <p>为什么描述层是 2 而不是 1：只选 1 张时，玩家只能在「一把枪」和「伤害 +3」之间二选一，
-     * 前者没有数值、后者没有形体，两种都不能单独成物。选 2 保证「形态 + 修饰」同时成立。
+     * <p>形态与修饰拆成两层而不是「5 张里选 2 张」，是因为后者的两个选取位
+     * 有隐含依赖：修饰池必须<b>先知道</b>形态才能过滤。混在一层发牌时，
+     * 玩家看到的 4 张修饰是按「候选里那张载体」过滤的 —— 如果他最终选了另一张，
+     * 那 4 张里可能有一半根本不适用于他选的形态。拆层之后，
+     * 修饰牌一定是在形态确认后才生成的，永远不会出现读完才发现对不上的情况。
      *
      * <p>稀有度阈值 1.6 / 2.8 / 4.5 的来历：品质点数只有 1/2/4/7 四档，
      * 全白均值 1.0、全蓝 2.0、全金 4.0、全红 7.0。阈值取在相邻两档之间偏上的位置，
@@ -118,17 +136,22 @@ public record BuildConfig(
      *
      * <p>史诗上限定在 4.5 而不是 5.0：5.0 时「一红两金」（均值正好 5.0）会掉回史诗，
      * 于是传说只由「两红以上」产生，实测 900 局仅 0.7% —— 玩家一个月都见不到一次。
-     * 4.5 让「一红两金」进入传说，实测约 3%，仍是稀有事件但不至于灭绝。
+     * 4.5 让「一红两金」进入传说，实测约 4%，仍是稀有事件但不至于灭绝。
      */
     public static BuildConfig defaults() {
         return new BuildConfig(
-                5, 2, 1,
+                5, 5, 1,
                 5, 1,
                 Map.of(Tier.WHITE, 38, Tier.BLUE, 32, Tier.GOLD, 22, Tier.RED, 8),
-                Tier.WHITE, Tier.WHITE,
+                Tier.WHITE, Tier.WHITE, Tier.WHITE,
                 1.6, 2.8, 4.5,
                 0.15
         );
+    }
+
+    /** 形态层固定选取数。与其它层保持同一访问方式，UI 不必为它写特例。 */
+    public int shapePickCount() {
+        return SHAPE_PICK;
     }
 
     public int weightOf(Tier tier) {
@@ -162,28 +185,27 @@ public record BuildConfig(
         return Rarity.LEGENDARY;
     }
 
-    /** 描述层总共要发几张非载体卡。 */
-    public int descModifierDealCount() {
-        return descDealCount - descCarrierSlots;
-    }
-
-    /** 描述层要选几张非载体卡（玩家在描述层真正做出的取舍）。 */
-    public int descModifierPickCount() {
-        return descPickCount - descCarrierSlots;
-    }
-
-    public BuildConfig withDescPickCount(int newPick) {
-        return new BuildConfig(descDealCount, newPick, descCarrierSlots, effectDealCount, effectPickCount,
-                qualityWeights, descFloor, effectFloor, commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+    public BuildConfig withModifierPickCount(int newPick) {
+        return new BuildConfig(shapeDealCount, modifierDealCount, newPick, effectDealCount, effectPickCount,
+                qualityWeights, shapeFloor, modifierFloor, effectFloor,
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
     }
 
     public BuildConfig withEffectPickCount(int newPick) {
-        return new BuildConfig(descDealCount, descPickCount, descCarrierSlots, effectDealCount, newPick,
-                qualityWeights, descFloor, effectFloor, commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+        return new BuildConfig(shapeDealCount, modifierDealCount, modifierPickCount, effectDealCount, newPick,
+                qualityWeights, shapeFloor, modifierFloor, effectFloor,
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
     }
 
-    public BuildConfig withFloors(Tier desc, Tier effect) {
-        return new BuildConfig(descDealCount, descPickCount, descCarrierSlots, effectDealCount, effectPickCount,
-                qualityWeights, desc, effect, commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+    public BuildConfig withDealCounts(int shape, int modifier, int effect) {
+        return new BuildConfig(shape, modifier, modifierPickCount, effect, effectPickCount,
+                qualityWeights, shapeFloor, modifierFloor, effectFloor,
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
+    }
+
+    public BuildConfig withFloors(Tier shape, Tier modifier, Tier effect) {
+        return new BuildConfig(shapeDealCount, modifierDealCount, modifierPickCount, effectDealCount, effectPickCount,
+                qualityWeights, shape, modifier, effect,
+                commonAvgMax, rareAvgMax, epicAvgMax, extraCardHatchPct);
     }
 }

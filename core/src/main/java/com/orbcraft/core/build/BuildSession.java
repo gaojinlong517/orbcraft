@@ -12,6 +12,8 @@ import com.orbcraft.core.spec.Rarity;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -19,22 +21,23 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 随机构筑状态机 —— 三层确认制，无交易、无点数、无扣费。
+ * 随机构筑状态机 —— 四层确认制，无交易、无点数、无扣费。
  *
  * <h2>一次完整的构筑</h2>
  * <pre>
  * new BuildSession(table, config, seed)   → TYPE_CHOOSING
  * typeOptions()                           → [装备, 召唤物, 消耗品]（带可用性）
  * choose(0)                               → TYPE_CONFIRMING（只是登记，未推进）
- * confirm()                               → 发 5 张描述牌 → DESC_CHOOSING
- * cards()                                 → 5 张描述卡（1 载体 + 4 修饰）
- * choose(2); choose(4)                    → DESC_CONFIRMING（可反复改选）
+ * confirm()                               → 发 5 张形态牌 → SHAPE_CHOOSING
+ * choose(2)                               → SHAPE_CONFIRMING
+ * confirm()                               → 用已确认形态过滤修饰池 → 发 5 张 → MODIFIER_CHOOSING
+ * choose(4)                               → MODIFIER_CONFIRMING
  * confirm()                               → 发 5 张效果牌 → EFFECT_CHOOSING
  * choose(1)                               → EFFECT_CONFIRMING
  * confirm()                               → FINISHED，返回 Composition
  * </pre>
  *
- * <h2>四条被刻意设计成「绕不过去」的约束</h2>
+ * <h2>五条被刻意设计成「绕不过去」的约束</h2>
  *
  * <p><b>① 没有公开的 deal()。</b> 发牌只发生在 {@link #confirm()} 内部。
  * 旧流程里 {@code DraftSession.deal()} 是 public 的，调用方可以连发五次牌再挑最好的 ——
@@ -45,11 +48,14 @@ import java.util.Set;
  * 需求里「任一层级玩家未确认前不可推进」在代码层面的落点就是这句：
  * 唯一的阶段跃迁语句全部写在 {@code confirm()} 里，别处没有 {@code phase =} 赋新层。
  *
- * <p><b>③ 描述层必须恰好含 1 张载体。</b>
- * 没有载体 = 没有外观 key，落地器会拒绝。与其让玩家造出一件"没有形体"的东西，
- * 不如在确认时挡住并告诉他缺什么。
+ * <p><b>③ 形态只有一个，且在结构上锁定。</b> {@code shapePickCount} 恒为 1。
+ * 一件产物只有一张外观 key、一套动画、一个碰撞箱，选 2 张形态在渲染层没有正确答案。
  *
- * <p><b>④ 没有任何资源字段。</b> 没有 points、没有 budget、没有 reroll 消耗。
+ * <p><b>④ 修饰牌一定晚于形态。</b> 修饰词的 {@code carrier_allow} 相对载体判定，
+ * 所以 {@code dealModifier()} 只在 {@code commitShape()} 之后调用，
+ * 过滤用的是<b>已确认</b>的载体 id。混层发牌会让玩家拿到一半不适用的修饰牌。
+ *
+ * <p><b>⑤ 没有任何资源字段。</b> 没有 points、没有 budget、没有 reroll 消耗。
  * 玩家能选什么只取决于抽到了什么。想变强只能多抽，不能多花。
  *
  * <p>本类不是线程安全的，一个 session 只属于一个玩家的一次构筑。
@@ -65,18 +71,30 @@ public final class BuildSession {
     private final BuildConfig config;
     private final SeedRandom rng;
     private final int[] weights;
+    /**
+     * 三类各自的池子容量，构造期算一次。
+     *
+     * <p>修饰池是<b>按载体</b>过滤的，所以「这个类型能不能造」不能只看词条总数，
+     * 要看「所有形态里最窄的那个」够不够。这一步放在构造期，是因为
+     * {@code typeOptions()} 会被 UI 每帧调用，不能每次都遍历 1124 条。
+     */
+    private final EnumMap<BaseKind, Pool> pools = new EnumMap<>(BaseKind.class);
 
     private BuildPhase phase = BuildPhase.TYPE_CHOOSING;
     private BaseKind kind;
     /** 类型层选中的索引，-1 表示未选。 */
     private int typeChosen = -1;
 
-    private List<DraftCard> descCards = List.of();
+    private List<DraftCard> shapeCards = List.of();
+    private List<DraftCard> modifierCards = List.of();
     private List<DraftCard> effectCards = List.of();
-    private final Set<Integer> descChosen = new LinkedHashSet<>();
+
+    private final Set<Integer> shapeChosen = new LinkedHashSet<>();
+    private final Set<Integer> modifierChosen = new LinkedHashSet<>();
     private final Set<Integer> effectChosen = new LinkedHashSet<>();
 
-    private final List<DraftCard> descPicked = new ArrayList<>();
+    private final List<DraftCard> shapePicked = new ArrayList<>();
+    private final List<DraftCard> modifierPicked = new ArrayList<>();
     private final List<DraftCard> effectPicked = new ArrayList<>();
     private final Set<String> usedFamilies = new LinkedHashSet<>();
 
@@ -89,6 +107,9 @@ public final class BuildSession {
         this.weights = new int[Tier.values().length];
         for (Tier t : Tier.values()) {
             weights[t.rank()] = this.config.weightOf(t);
+        }
+        for (BaseKind k : BaseKind.values()) {
+            pools.put(k, scanPool(k));
         }
     }
 
@@ -121,11 +142,14 @@ public final class BuildSession {
      * （装备 / 消耗品 / 召唤物）不同 —— 不跟 enum 走，是因为枚举顺序是历史产物，
      * 而这一屏是玩家每天都会点的位置，顺序跟着玩法需求走：
      * 装备是使用频率最高的一类，放第一格能减少误点。
+     *
+     * <p>可用性是<b>三层联合判定</b>：形态够、每个形态下的修饰够、效果够。
+     * 只判一层会造出「选了装备，走完形态才发现修饰池是空的」这种死路。
      */
     public List<TypeOption> typeOptions() {
         List<TypeOption> out = new ArrayList<>(TYPE_ORDER.length);
         for (BaseKind k : TYPE_ORDER) {
-            out.add(TypeOption.of(k, usablePoolSize(k)));
+            out.add(optionOf(k, pools.get(k)));
         }
         return List.copyOf(out);
     }
@@ -150,44 +174,57 @@ public final class BuildSession {
         choose(indexOfType(kind));
     }
 
-    /**
-     * 某个类型当前可用的词条总数越少，越可能在后续层抽空。
-     * 这里要求同时满足载体、修饰、效果三个池子的最低张数，否则该类型不可选。
-     */
-    private int usablePoolSize(BaseKind k) {
-        int carriers = 0;
-        for (Affix a : table.layer(Layer.CARRIER)) {
-            if (a.allowsBaseType(k.wire())) {
-                carriers++;
-            }
+    private TypeOption optionOf(BaseKind k, Pool pool) {
+        if (pool.shape() < config.shapePickCount()) {
+            return new TypeOption(k, false, 0,
+                    "「" + k.zh() + "」在词库里没有可用形态（载体）");
         }
-        int modifiers = 0;
-        int effects = 0;
-        for (Layer l : Layer.values()) {
-            if (l == Layer.CARRIER) {
+        if (pool.minModifier() < config.modifierPickCount()) {
+            return new TypeOption(k, false, 0,
+                    "「" + k.zh() + "」最窄的形态下只有 " + pool.minModifier()
+                            + " 条可用修饰，本层至少需要 " + config.modifierPickCount() + " 条");
+        }
+        if (pool.effect() < config.effectPickCount()) {
+            return new TypeOption(k, false, 0,
+                    "「" + k.zh() + "」可用效果只有 " + pool.effect()
+                            + " 条，本层至少需要 " + config.effectPickCount() + " 条");
+        }
+        return new TypeOption(k, true, pool.shape() + pool.minModifier() + pool.effect(), "");
+    }
+
+    /** 某一类在真实卡表下的三层池子容量。 */
+    private Pool scanPool(BaseKind k) {
+        int shape = 0;
+        int minModifier = Integer.MAX_VALUE;
+        for (Affix a : table.layer(Layer.CARRIER)) {
+            if (!a.allowsBaseType(k.wire())) {
                 continue;
             }
-            for (Affix a : table.layer(l)) {
-                if (!a.allowsBaseType(k.wire())) {
-                    continue;
-                }
-                if (l == Layer.EFFECT) {
-                    effects++;
-                } else {
-                    modifiers++;
+            shape++;
+            String carrier = a.carrierId();
+            Set<String> families = new HashSet<>();
+            for (Layer l : List.of(Layer.ELEMENT, Layer.ATTRIBUTE)) {
+                for (Affix m : table.layer(l)) {
+                    if (m.allowsBaseType(k.wire()) && m.allowsCarrier(carrier)) {
+                        families.add(m.family());
+                    }
                 }
             }
+            minModifier = Math.min(minModifier, families.size());
         }
-        if (carriers < config.descCarrierSlots()) {
-            return 0;
+        if (shape == 0) {
+            minModifier = 0;
         }
-        if (modifiers < config.descModifierPickCount()) {
-            return 0;
+        Set<String> effectFamilies = new HashSet<>();
+        for (Affix a : table.layer(Layer.EFFECT)) {
+            if (a.allowsBaseType(k.wire())) {
+                effectFamilies.add(a.family());
+            }
         }
-        if (effects < config.effectPickCount()) {
-            return 0;
-        }
-        return carriers + modifiers + effects;
+        return new Pool(shape, minModifier == Integer.MAX_VALUE ? 0 : minModifier, effectFamilies.size());
+    }
+
+    private record Pool(int shape, int minModifier, int effect) {
     }
 
     // ---------------------------------------------------------------- 统一选择
@@ -195,7 +232,7 @@ public final class BuildSession {
     /**
      * 在当前层点选第 {@code index} 张候选。
      *
-     * <p>只登记，<b>不推进</b>。再次点同一张会取消选择（单选层则回到「未选」）。
+     * <p>只登记，<b>不推进</b>。再次点同一张会取消选择（回到「未选」）。
      * 数量达到本层上限后再点新的，会抛 {@code TOO_MANY_CHOICES} 而不是悄悄替换 ——
      * 悄悄替换会让玩家以为自己选的还在。
      */
@@ -203,11 +240,40 @@ public final class BuildSession {
         requireBuilding("选择");
         switch (phase) {
             case TYPE_CHOOSING, TYPE_CONFIRMING -> chooseType(index);
-            case DESC_CHOOSING, DESC_CONFIRMING -> chooseDesc(index);
-            case EFFECT_CHOOSING, EFFECT_CONFIRMING -> chooseEffect(index);
+            case SHAPE_CHOOSING, SHAPE_CONFIRMING -> phase = toggle(
+                    shapeChosen, shapeCards, index, config.shapePickCount(),
+                    "形态层", BuildPhase.SHAPE_CHOOSING, BuildPhase.SHAPE_CONFIRMING);
+            case MODIFIER_CHOOSING, MODIFIER_CONFIRMING -> phase = toggle(
+                    modifierChosen, modifierCards, index, config.modifierPickCount(),
+                    "修饰层", BuildPhase.MODIFIER_CHOOSING, BuildPhase.MODIFIER_CONFIRMING);
+            case EFFECT_CHOOSING, EFFECT_CONFIRMING -> phase = toggle(
+                    effectChosen, effectCards, index, config.effectPickCount(),
+                    "效果层", BuildPhase.EFFECT_CHOOSING, BuildPhase.EFFECT_CONFIRMING);
             default -> throw new BuildException(BuildException.Code.WRONG_PHASE,
                     "当前阶段不能选择：" + phase);
         }
+    }
+
+    /**
+     * 单层选择/取消的公共逻辑。
+     *
+     * @return 选择后应处于的阶段（选空回到 choosing，否则 confirming）
+     */
+    private BuildPhase toggle(Set<Integer> chosen, List<DraftCard> cards, int index, int maxPick,
+                              String layerZh, BuildPhase choosing, BuildPhase confirming) {
+        if (index < 0 || index >= cards.size()) {
+            throw new BuildException(BuildException.Code.INDEX_OUT_OF_RANGE,
+                    layerZh + "索引 " + index + " 越界（本层共 " + cards.size() + " 张）");
+        }
+        if (chosen.remove(index)) {
+            return chosen.isEmpty() ? choosing : confirming;
+        }
+        if (chosen.size() >= maxPick) {
+            throw new BuildException(BuildException.Code.TOO_MANY_CHOICES,
+                    layerZh + "最多选 " + maxPick + " 张，已选满；先取消一张再选");
+        }
+        chosen.add(index);
+        return confirming;
     }
 
     private void chooseType(int index) {
@@ -233,42 +299,6 @@ public final class BuildSession {
         phase = BuildPhase.TYPE_CONFIRMING;
     }
 
-    private void chooseDesc(int index) {
-        if (index < 0 || index >= descCards.size()) {
-            throw new BuildException(BuildException.Code.INDEX_OUT_OF_RANGE,
-                    "描述卡索引 " + index + " 越界（本层共 " + descCards.size() + " 张）");
-        }
-        if (descChosen.contains(index)) {
-            descChosen.remove(index);
-            phase = descChosen.isEmpty() ? BuildPhase.DESC_CHOOSING : BuildPhase.DESC_CONFIRMING;
-            return;
-        }
-        if (descChosen.size() >= config.descPickCount()) {
-            throw new BuildException(BuildException.Code.TOO_MANY_CHOICES,
-                    "描述卡层最多选 " + config.descPickCount() + " 张，已选满；先取消一张再选");
-        }
-        descChosen.add(index);
-        phase = BuildPhase.DESC_CONFIRMING;
-    }
-
-    private void chooseEffect(int index) {
-        if (index < 0 || index >= effectCards.size()) {
-            throw new BuildException(BuildException.Code.INDEX_OUT_OF_RANGE,
-                    "效果卡索引 " + index + " 越界（本层共 " + effectCards.size() + " 张）");
-        }
-        if (effectChosen.contains(index)) {
-            effectChosen.remove(index);
-            phase = effectChosen.isEmpty() ? BuildPhase.EFFECT_CHOOSING : BuildPhase.EFFECT_CONFIRMING;
-            return;
-        }
-        if (effectChosen.size() >= config.effectPickCount()) {
-            throw new BuildException(BuildException.Code.TOO_MANY_CHOICES,
-                    "效果层最多选 " + config.effectPickCount() + " 张，已选满；先取消一张再选");
-        }
-        effectChosen.add(index);
-        phase = BuildPhase.EFFECT_CONFIRMING;
-    }
-
     /** 清空本层已选，回到「未选」。已确认的层不受影响。 */
     public void clearChoices() {
         requireBuilding("清空选择");
@@ -278,9 +308,13 @@ public final class BuildSession {
                 kind = null;
                 phase = BuildPhase.TYPE_CHOOSING;
             }
-            case DESC_CHOOSING, DESC_CONFIRMING -> {
-                descChosen.clear();
-                phase = BuildPhase.DESC_CHOOSING;
+            case SHAPE_CHOOSING, SHAPE_CONFIRMING -> {
+                shapeChosen.clear();
+                phase = BuildPhase.SHAPE_CHOOSING;
+            }
+            case MODIFIER_CHOOSING, MODIFIER_CONFIRMING -> {
+                modifierChosen.clear();
+                phase = BuildPhase.MODIFIER_CHOOSING;
             }
             case EFFECT_CHOOSING, EFFECT_CONFIRMING -> {
                 effectChosen.clear();
@@ -306,17 +340,26 @@ public final class BuildSession {
         switch (phase) {
             case TYPE_CHOOSING -> throw new BuildException(BuildException.Code.NO_PENDING_CHOICE,
                     "还没有选择类型，无法确认");
-            case DESC_CHOOSING -> throw new BuildException(BuildException.Code.NO_PENDING_CHOICE,
-                    "还没有选择描述卡，无法确认");
+            case SHAPE_CHOOSING -> throw new BuildException(BuildException.Code.NO_PENDING_CHOICE,
+                    "还没有选择形态，无法确认");
+            case MODIFIER_CHOOSING -> throw new BuildException(BuildException.Code.NO_PENDING_CHOICE,
+                    "还没有选择修饰，无法确认");
             case EFFECT_CHOOSING -> throw new BuildException(BuildException.Code.NO_PENDING_CHOICE,
                     "还没有选择效果，无法确认");
             case TYPE_CONFIRMING -> {
-                dealDesc();
-                phase = BuildPhase.DESC_CHOOSING;
+                dealShape();
+                phase = BuildPhase.SHAPE_CHOOSING;
                 return Optional.empty();
             }
-            case DESC_CONFIRMING -> {
-                commitDesc();
+            case SHAPE_CONFIRMING -> {
+                commitShape();
+                // 修饰池依赖已确认的形态 —— 这一句的顺序就是「先形态，再修饰」的全部实现
+                dealModifier();
+                phase = BuildPhase.MODIFIER_CHOOSING;
+                return Optional.empty();
+            }
+            case MODIFIER_CONFIRMING -> {
+                commitModifier();
                 dealEffect();
                 phase = BuildPhase.EFFECT_CHOOSING;
                 return Optional.empty();
@@ -325,7 +368,8 @@ public final class BuildSession {
                 commitEffect();
                 composition = buildComposition();
                 phase = BuildPhase.FINISHED;
-                descCards = List.of();
+                shapeCards = List.of();
+                modifierCards = List.of();
                 effectCards = List.of();
                 return Optional.of(composition);
             }
@@ -338,8 +382,8 @@ public final class BuildSession {
     public boolean canConfirm() {
         return switch (phase) {
             case TYPE_CONFIRMING -> true;
-            case DESC_CONFIRMING -> descChosen.size() == config.descPickCount()
-                    && countCarrier(descCards, descChosen) == config.descCarrierSlots();
+            case SHAPE_CONFIRMING -> shapeChosen.size() == config.shapePickCount();
+            case MODIFIER_CONFIRMING -> modifierChosen.size() == config.modifierPickCount();
             case EFFECT_CONFIRMING -> effectChosen.size() == config.effectPickCount();
             default -> false;
         };
@@ -349,19 +393,14 @@ public final class BuildSession {
     public String confirmHint() {
         return switch (phase) {
             case TYPE_CHOOSING -> "先选一个类型";
-            case DESC_CHOOSING -> "请选择 " + config.descPickCount() + " 张描述卡";
+            case SHAPE_CHOOSING -> "请选择 1 个形态";
+            case MODIFIER_CHOOSING -> "请选择 " + config.modifierPickCount() + " 张修饰";
             case EFFECT_CHOOSING -> "请选择 " + config.effectPickCount() + " 张效果";
             case TYPE_CONFIRMING -> canConfirm() ? "" : "类型未选定";
-            case DESC_CONFIRMING -> {
-                int need = config.descPickCount() - descChosen.size();
-                if (need > 0) {
-                    yield "还差 " + need + " 张描述卡";
-                }
-                int carriers = countCarrier(descCards, descChosen);
-                if (carriers != config.descCarrierSlots()) {
-                    yield "需要恰好 " + config.descCarrierSlots() + " 张载体（当前 " + carriers + " 张）";
-                }
-                yield "";
+            case SHAPE_CONFIRMING -> shapeChosen.isEmpty() ? "形态未选定" : "";
+            case MODIFIER_CONFIRMING -> {
+                int need = config.modifierPickCount() - modifierChosen.size();
+                yield need > 0 ? "还差 " + need + " 张修饰" : "";
             }
             case EFFECT_CONFIRMING -> {
                 int need = config.effectPickCount() - effectChosen.size();
@@ -371,23 +410,35 @@ public final class BuildSession {
         };
     }
 
-    private void commitDesc() {
-        if (descChosen.size() != config.descPickCount()) {
+    private void commitShape() {
+        if (shapeChosen.size() != config.shapePickCount()) {
             throw new BuildException(BuildException.Code.NOT_ENOUGH_CHOICES,
-                    "描述卡层需要选 " + config.descPickCount() + " 张，当前选了 " + descChosen.size() + " 张");
+                    "形态层需要选 " + config.shapePickCount() + " 张，当前选了 " + shapeChosen.size() + " 张");
         }
-        int carriers = countCarrier(descCards, descChosen);
-        if (carriers != config.descCarrierSlots()) {
+        int index = shapeChosen.iterator().next();
+        DraftCard card = shapeCards.get(index);
+        if (card.affix().layer() != Layer.CARRIER) {
+            // 形态层的池子只放载体，走到这里说明卡表或过滤逻辑被改坏了
             throw new BuildException(BuildException.Code.CARRIER_REQUIRED,
-                    "描述卡层必须恰好包含 " + config.descCarrierSlots()
-                            + " 张载体（当前 " + carriers + " 张）：没有载体的产物无法生成外观");
+                    "形态层选中的不是载体卡：" + card.affix().id());
         }
-        for (int i : descChosen) {
-            DraftCard c = descCards.get(i);
-            descPicked.add(c);
-            usedFamilies.add(c.family());
+        shapePicked.add(card);
+        usedFamilies.add(card.family());
+        shapeChosen.clear();
+    }
+
+    private void commitModifier() {
+        if (modifierChosen.size() != config.modifierPickCount()) {
+            throw new BuildException(BuildException.Code.NOT_ENOUGH_CHOICES,
+                    "修饰层需要选 " + config.modifierPickCount() + " 张，当前选了 "
+                            + modifierChosen.size() + " 张");
         }
-        descChosen.clear();
+        for (int i : modifierChosen) {
+            DraftCard card = modifierCards.get(i);
+            modifierPicked.add(card);
+            usedFamilies.add(card.family());
+        }
+        modifierChosen.clear();
     }
 
     private void commitEffect() {
@@ -407,72 +458,62 @@ public final class BuildSession {
             throw new BuildException(BuildException.Code.WRONG_PHASE, "流程已经结束：" + phase);
         }
         phase = BuildPhase.CANCELLED;
-        descCards = List.of();
+        shapeCards = List.of();
+        modifierCards = List.of();
         effectCards = List.of();
     }
 
     // ---------------------------------------------------------------- 发牌
 
     /**
-     * 描述层发牌：固定 {@code descCarrierSlots} 张载体 + 其余修饰卡。
+     * 形态层发牌：只发载体，不带任何修饰。
      *
-     * <p><b>载体必须先抽。</b> 修饰卡的 {@code carrier_allow} 是相对载体判断的，
-     * 同时抽会让「针对枪的属性」配上法杖。先抽载体、再按它过滤修饰池，
-     * 玩家看到的 5 张才是一套读得懂的选项。
-     *
-     * <p>载体只有 {@code descCarrierSlots} 张，也就是玩家在描述层不能换载体 ——
-     * 换载体的自由属于类型层之前的「再抽一次」。这样设计是因为载体决定外观与动画，
-     * 让玩家在描述层随便换，等于给了 6 种外观 × 5 张牌的搜索空间。
+     * <p>与旧流程的关键差别：以前载体和修饰混在 5 张里一起发。那样做的代价是，
+     * 修饰只能按「候选里那张载体」过滤 —— 玩家若最终选了另一张（旧流程允许 1 张载体，
+     * 所以不会发生，但一旦载体位放开到 2 就会），手里一半修饰牌是不适用的。
+     * 拆层后这个问题在结构上不存在：修饰池只在形态确认后才被过滤。
      */
-    private void dealDesc() {
-        List<Affix> carrierPool = pool(Layer.CARRIER, null, null);
-        if (carrierPool.size() < config.descCarrierSlots()) {
+    private void dealShape() {
+        List<Affix> pool = pool(Layer.CARRIER, null, null);
+        if (pool.size() < config.shapePickCount()) {
             throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
-                    "「" + kind.zh() + "」可用载体只有 " + carrierPool.size()
-                            + " 个，本层需要 " + config.descCarrierSlots() + " 个");
+                    "「" + kind.zh() + "」可用形态只有 " + pool.size()
+                            + " 个，本层需要 " + config.shapePickCount() + " 个");
         }
-        shuffle(carrierPool);
-        List<Affix> carriers = new ArrayList<>(carrierPool.subList(0, config.descCarrierSlots()));
+        shuffle(pool);
+        shapeCards = List.copyOf(toCards(takeDistinct(pool, config.shapeDealCount()), config.shapeFloor()));
+    }
 
-        // 载体已定，用它去过滤修饰池
-        String primaryCarrier = carriers.get(0).carrierId();
-        List<Affix> modifierPool = new ArrayList<>(pool(Layer.ELEMENT, primaryCarrier, null));
-        modifierPool.addAll(pool(Layer.ATTRIBUTE, primaryCarrier, null));
+    /**
+     * 修饰层发牌：用<b>已确认</b>的形态过滤元素 + 属性池。
+     *
+     * <p>元素卡与属性卡合在一层，是因为两者在玩法上是同一件事 ——
+     * 「这件东西多了点什么」。分开就得多一层确认，而玩家在 5 张里挑 1 张时
+     * 并不会因为「这张是元素、那张是属性」而做出不同的决策。
+     */
+    private void dealModifier() {
+        String carrier = confirmedCarrier();
+        if (carrier == null) {
+            throw new BuildException(BuildException.Code.CARRIER_REQUIRED,
+                    "形态尚未确认，无法生成修饰牌");
+        }
+        List<Affix> pool = new ArrayList<>(pool(Layer.ELEMENT, carrier, null));
+        pool.addAll(pool(Layer.ATTRIBUTE, carrier, null));
 
-        int want = config.descModifierDealCount();
-        if (modifierPool.size() < config.descModifierPickCount()) {
+        if (pool.size() < config.modifierPickCount()) {
             throw new BuildException(BuildException.Code.POOL_TOO_SMALL,
-                    "「" + kind.zh() + "」在载体 " + primaryCarrier + " 下只有 "
-                            + modifierPool.size() + " 条可用修饰，本层至少要能选 "
-                            + config.descModifierPickCount() + " 张");
+                    "载体 " + carrier + " 下只有 " + pool.size() + " 条可用修饰，本层至少需要 "
+                            + config.modifierPickCount() + " 张");
         }
-        shuffle(modifierPool);
-        int take = Math.min(want, modifierPool.size());
-        List<Affix> modifiers = new ArrayList<>(modifierPool.subList(0, take));
-
-        List<Affix> all = new ArrayList<>(carriers.size() + modifiers.size());
-        all.addAll(carriers);
-        all.addAll(modifiers);
-        // 位置打散：载体不能永远在第 1 格，否则玩家不用读卡就知道该点哪里
-        shuffle(all);
-
-        List<DraftCard> cards = new ArrayList<>(all.size());
-        for (Affix a : all) {
-            cards.add(new DraftCard(a, rollTier(a, config.descFloor())));
-        }
-        descCards = List.copyOf(cards);
+        shuffle(pool);
+        modifierCards = List.copyOf(toCards(
+                takeDistinct(pool, config.modifierDealCount()), config.modifierFloor()));
     }
 
     /** 效果层发牌：按已确定的类型 / 载体 / 元素过滤效果池。 */
     private void dealEffect() {
-        String carrier = descPicked.stream()
-                .filter(c -> c.affix().layer() == Layer.CARRIER)
-                .map(c -> c.affix().carrierId())
-                .findFirst().orElse(null);
-        String element = descPicked.stream()
-                .filter(c -> c.affix().layer() == Layer.ELEMENT)
-                .map(c -> c.affix().elementId())
-                .findFirst().orElse(null);
+        String carrier = confirmedCarrier();
+        String element = confirmedElement();
 
         List<Affix> pool = pool(Layer.EFFECT, carrier, element);
         if (pool.size() < config.effectPickCount()) {
@@ -481,12 +522,41 @@ public final class BuildSession {
                             + " 条可用效果，本层需要至少 " + config.effectPickCount() + " 张");
         }
         shuffle(pool);
-        int take = Math.min(config.effectDealCount(), pool.size());
-        List<DraftCard> cards = new ArrayList<>(take);
-        for (Affix a : pool.subList(0, take)) {
-            cards.add(new DraftCard(a, rollTier(a, config.effectFloor())));
+        effectCards = List.copyOf(toCards(
+                takeDistinct(pool, config.effectDealCount()), config.effectFloor()));
+    }
+
+    /**
+     * 按「族」去重取前 {@code want} 条。
+     *
+     * <p>为什么需要它：元素特化族（{@code attr.elemResist} 之类）一个族在本载体上
+     * 会展开成 9 条（9 个元素）。它们的 {@code family} 相同，如果直接取前 5 条，
+     * 玩家可能看到「火焰抗性 / 冰霜抗性 / 雷抗性 / 毒抗性 / 光抗性」——
+     * 五张牌其实是同一个东西换了元素。族去重保证 5 张是 5 种<b>不同</b>的强化方向。
+     *
+     * <p>实测最窄的载体也有 19 个修饰族，所以去重不会让候选凑不满 5 张。
+     */
+    private static List<Affix> takeDistinct(List<Affix> shuffled, int want) {
+        int limit = Math.min(want, shuffled.size());
+        List<Affix> out = new ArrayList<>(limit);
+        Set<String> families = new HashSet<>();
+        for (Affix a : shuffled) {
+            if (out.size() >= limit) {
+                break;
+            }
+            if (families.add(a.family())) {
+                out.add(a);
+            }
         }
-        effectCards = List.copyOf(cards);
+        return out;
+    }
+
+    private List<DraftCard> toCards(List<Affix> affixes, Tier floor) {
+        List<DraftCard> cards = new ArrayList<>(affixes.size());
+        for (Affix a : affixes) {
+            cards.add(new DraftCard(a, rollTier(a, floor)));
+        }
+        return cards;
     }
 
     /**
@@ -550,7 +620,8 @@ public final class BuildSession {
     /** 当前层的候选卡；类型层返回空列表。 */
     public List<DraftCard> cards() {
         return switch (phase) {
-            case DESC_CHOOSING, DESC_CONFIRMING -> descCards;
+            case SHAPE_CHOOSING, SHAPE_CONFIRMING -> shapeCards;
+            case MODIFIER_CHOOSING, MODIFIER_CONFIRMING -> modifierCards;
             case EFFECT_CHOOSING, EFFECT_CONFIRMING -> effectCards;
             default -> List.of();
         };
@@ -560,7 +631,8 @@ public final class BuildSession {
     public List<Integer> chosen() {
         Set<Integer> src = switch (phase) {
             case TYPE_CHOOSING, TYPE_CONFIRMING -> typeChosen < 0 ? Set.of() : Set.of(typeChosen);
-            case DESC_CHOOSING, DESC_CONFIRMING -> descChosen;
+            case SHAPE_CHOOSING, SHAPE_CONFIRMING -> shapeChosen;
+            case MODIFIER_CHOOSING, MODIFIER_CONFIRMING -> modifierChosen;
             case EFFECT_CHOOSING, EFFECT_CONFIRMING -> effectChosen;
             default -> Set.of();
         };
@@ -572,7 +644,8 @@ public final class BuildSession {
     /** 当前层已选中的卡。 */
     public List<DraftCard> chosenCards() {
         List<DraftCard> src = switch (phase) {
-            case DESC_CHOOSING, DESC_CONFIRMING -> descCards;
+            case SHAPE_CHOOSING, SHAPE_CONFIRMING -> shapeCards;
+            case MODIFIER_CHOOSING, MODIFIER_CONFIRMING -> modifierCards;
             case EFFECT_CHOOSING, EFFECT_CONFIRMING -> effectCards;
             default -> List.of();
         };
@@ -587,8 +660,10 @@ public final class BuildSession {
 
     /** 已确认的卡（跨层累计），用于 UI 显示「目前已经确定的部分」。 */
     public List<DraftCard> confirmedCards() {
-        List<DraftCard> out = new ArrayList<>(descPicked.size() + effectPicked.size());
-        out.addAll(descPicked);
+        List<DraftCard> out = new ArrayList<>(
+                shapePicked.size() + modifierPicked.size() + effectPicked.size());
+        out.addAll(shapePicked);
+        out.addAll(modifierPicked);
         out.addAll(effectPicked);
         return List.copyOf(out);
     }
@@ -601,9 +676,9 @@ public final class BuildSession {
                 typeOptions(),
                 cards(),
                 chosen(),
-                config.descPickCount(),
+                config.shapePickCount(),
+                config.modifierPickCount(),
                 config.effectPickCount(),
-                config.descCarrierSlots(),
                 canConfirm(),
                 confirmHint(),
                 confirmedCards(),
@@ -614,9 +689,33 @@ public final class BuildSession {
 
     // ---------------------------------------------------------------- 内部
 
+    /** 已确认形态的载体 id（{@code gun} / {@code staff}）。 */
+    private String confirmedCarrier() {
+        for (DraftCard c : shapePicked) {
+            String id = c.affix().carrierId();
+            if (id != null) {
+                return id;
+            }
+        }
+        return null;
+    }
+
+    /** 已确认修饰里的元素 id；修饰选了属性卡时返回 null（效果池不按元素过滤）。 */
+    private String confirmedElement() {
+        for (DraftCard c : modifierPicked) {
+            String id = c.affix().elementId();
+            if (id != null) {
+                return id;
+            }
+        }
+        return null;
+    }
+
     private Composition buildComposition() {
-        List<DraftCard> all = new ArrayList<>(descPicked.size() + effectPicked.size());
-        all.addAll(descPicked);
+        List<DraftCard> all = new ArrayList<>(
+                shapePicked.size() + modifierPicked.size() + effectPicked.size());
+        all.addAll(shapePicked);
+        all.addAll(modifierPicked);
         all.addAll(effectPicked);
         // 固定顺序：载体 → 元素 → 属性 → 效果。顺序不产生玩法意义，但必须确定，
         // 否则同一产物两次序列化的结果不相等，幂等判断会失效。
@@ -640,16 +739,6 @@ public final class BuildSession {
         multiplier += config.extraCardHatchPct() * (all.size() - 1);
 
         return new Composition(kind, all, rng.seed(), rarity, total, avg, multiplier);
-    }
-
-    private static int countCarrier(List<DraftCard> cards, Set<Integer> chosen) {
-        int n = 0;
-        for (int i : chosen) {
-            if (i >= 0 && i < cards.size() && cards.get(i).affix().layer() == Layer.CARRIER) {
-                n++;
-            }
-        }
-        return n;
     }
 
     /** Fisher-Yates。用 {@link SeedRandom} 而不是 java.util.Random，保证可按 seed 回放。 */
