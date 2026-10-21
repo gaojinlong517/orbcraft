@@ -671,7 +671,12 @@ public final class BuildSelfTest {
             }
         }
         check("BuildSession 无公开的 deal/购买/免费刷新类方法", exposed.isEmpty(), exposed.toString());
-        check("公开方法数量合理（≤ 22）", methods.size() <= 22, "" + methods.size() + " 个：" + methods);
+        // 上限从 22 提到 23，是集成阶段唯一一次放宽，且逐条对得上：
+        //   + applyTargetPlan  定向卡接线（每天一次配额，必须在发牌前设置）
+        //   + targetMissed     一度加过，但已折进 BuildSnapshot，不占接口面
+        // 换句话说，「定向卡」这个功能在状态机上只增加了一个入口。
+        // 以后再要放宽，必须同样写明加了什么、为什么不能折进快照。
+        check("公开方法数量合理（≤ 23）", methods.size() <= 23, "" + methods.size() + " 个：" + methods);
 
         // rerollShape 必须是有上限的：次数减到 0 后必然拒绝，不会退化成无限刷新
         BuildSession limited = startShape(BuildConfig.defaults().withShapeRerolls(1), BaseKind.EQUIPMENT, 6L);

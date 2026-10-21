@@ -45,6 +45,13 @@ public record BuildSnapshot(
         int requiredModifierPick,
         int requiredEffectPick,
         int shapeRerollsLeft,
+        /**
+         * 定向的元素卡因为与已确认形态不兼容而未能兑现。
+         *
+         * <p>放在快照里而不是给 {@code BuildSession} 加一个 getter：UI 本来就该
+         * 「一次读完整状态」，多一个入口只会让序列化点分散。
+         */
+        boolean targetMissed,
         boolean canConfirm,
         String confirmHint,
         List<DraftCard> confirmedCards,

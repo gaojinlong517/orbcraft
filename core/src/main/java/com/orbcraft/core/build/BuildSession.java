@@ -6,9 +6,11 @@ import com.orbcraft.core.draft.BaseKind;
 import com.orbcraft.core.draft.DraftCard;
 import com.orbcraft.core.draft.Layer;
 import com.orbcraft.core.draft.SeedRandom;
+import com.orbcraft.core.draft.TargetCard;
 import com.orbcraft.core.draft.Tier;
 import com.orbcraft.core.draft.TierData;
 import com.orbcraft.core.spec.Rarity;
+import com.orbcraft.core.target.TargetPlan;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -89,6 +91,24 @@ public final class BuildSession {
 
     /** 形态层「换一批」剩余次数。构造期取配置值，只减不增。 */
     private int shapeRerollsLeft;
+
+    /**
+     * 本局启用的定向卡。{@code null} 表示未启用。
+     *
+     * <p>只能通过 {@link #applyTargetPlan} 设置，且必须在形态发牌<b>之前</b>。
+     * 允许「看完牌再补一张」等于免费保底，随机性会被买穿 —— 这是
+     * {@link TargetCard} 那条「必须在发牌前使用」的约定在构筑层的落地。
+     */
+    private TargetPlan targetPlan;
+
+    /**
+     * 定向的元素卡因为与已确认形态不兼容而未能兑现。
+     *
+     * <p>元素词条带 {@code carrier_allow}，不是每个元素都能挂到任意载体上。
+     * 这种情况不能抛异常把玩家卡死在第三层，也不能假装成功 ——
+     * 只能如实置位，由 UI 告诉玩家「这张定向卡与所选形态不兼容，已失效」。
+     */
+    private boolean targetMissed;
 
     /**
      * 本次构筑里<b>已经发给过玩家的</b>载体 id，累计。
@@ -271,6 +291,149 @@ public final class BuildSession {
      * 数量达到本层上限后再点新的，会抛 {@code TOO_MANY_CHOICES} 而不是悄悄替换 ——
      * 悄悄替换会让玩家以为自己选的还在。
      */
+    // ---------------------------------------------------------------- 定向卡接线
+
+    /**
+     * 启用一组定向卡。必须在形态发牌前调用（{@code TYPE_CHOOSING} / {@code TYPE_CONFIRMING}）。
+     *
+     * <p>三处校验都选择「当场拒绝」而不是「发牌时静默跳过」：玩家用掉的是每天一次的配额，
+     * 如果定向卡默默不生效，他不会认为这是数据问题，只会认为功能坏了。
+     *
+     * @throws BuildException 类型未选、方案与本局类型不符、词条不存在、已过发牌时机、重复使用
+     */
+    public void applyTargetPlan(TargetPlan plan) {
+        requireBuilding("设置定向卡");
+        if (plan == null) {
+            throw new BuildException(BuildException.Code.BAD_CONFIG, "定向方案不能为 null");
+        }
+        if (plan.isEmpty()) {
+            return;
+        }
+        if (targetPlan != null && !targetPlan.isEmpty()) {
+            throw new BuildException(BuildException.Code.TARGET_REJECTED,
+                    "本局已经用过定向卡，不能再叠加");
+        }
+        if (phase != BuildPhase.TYPE_CHOOSING && phase != BuildPhase.TYPE_CONFIRMING) {
+            throw new BuildException(BuildException.Code.TARGET_REJECTED,
+                    "定向卡必须在形态发牌前使用，当前阶段 " + phase);
+        }
+        if (kind == null) {
+            throw new BuildException(BuildException.Code.TARGET_REJECTED,
+                    "请先在类型层选定类型，再使用定向卡");
+        }
+        if (kind != plan.kind()) {
+            throw new BuildException(BuildException.Code.TARGET_REJECTED,
+                    "定向方案是「" + plan.kind().zh() + "」，与已选类型「" + kind.zh() + "」不一致");
+        }
+        for (TargetCard card : plan.cards()) {
+            if (table.findById(card.targetAffix()).isEmpty()) {
+                throw new BuildException(BuildException.Code.TARGET_REJECTED,
+                        "定向卡指向的词条不存在：" + card.targetAffix());
+            }
+        }
+        this.targetPlan = plan;
+    }
+
+    /** 定向的载体 id；没有定向载体时返回 null。 */
+    private String targetedCarrierId() {
+        if (targetPlan == null) {
+            return null;
+        }
+        for (TargetCard card : targetPlan.cards()) {
+            if (card.targetLayer() == Layer.CARRIER) {
+                String id = card.targetAffix();
+                return id.startsWith("carrier.") ? id.substring("carrier.".length()) : id;
+            }
+        }
+        return null;
+    }
+
+    /** 定向的元素词条 id；没有定向元素时返回 null。 */
+    private String targetedElementId() {
+        if (targetPlan == null) {
+            return null;
+        }
+        for (TargetCard card : targetPlan.cards()) {
+            if (card.targetLayer() == Layer.ELEMENT) {
+                return card.targetAffix();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 把定向载体塞进形态候选，并固定在第 1 格。
+     *
+     * <p>「只保类型不保强度」在这里体现为：<b>品质仍然现掷</b>，定向只保证这张牌出现。
+     * 换一批之后同样要重放一次 —— 否则玩家用掉配额换来一次换批，定向就没了。
+     */
+    private List<DraftCard> forceCarrier(List<DraftCard> cards, List<Affix> candidates) {
+        String forced = targetedCarrierId();
+        if (forced == null || cards.isEmpty()) {
+            return cards;
+        }
+        List<DraftCard> out = new ArrayList<>(cards);
+        int index = -1;
+        for (int i = 0; i < out.size(); i++) {
+            if (forced.equals(out.get(i).affix().carrierId())) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            Affix affix = null;
+            for (Affix a : candidates) {
+                if (forced.equals(a.carrierId())) {
+                    affix = a;
+                    break;
+                }
+            }
+            if (affix == null) {
+                targetMissed = true;
+                return cards;
+            }
+            index = out.size() - 1;
+            out.set(index, new DraftCard(affix, rollTier(affix, config.shapeFloor())));
+        }
+        DraftCard hit = out.remove(index);
+        out.add(0, hit);
+        return List.copyOf(out);
+    }
+
+    /** 把定向元素塞进修饰候选，并固定在第 1 格。与形态不兼容时置 {@link #targetMissed}。 */
+    private List<DraftCard> forceElement(List<DraftCard> cards, List<Affix> pool) {
+        String forced = targetedElementId();
+        if (forced == null || cards.isEmpty()) {
+            return cards;
+        }
+        List<DraftCard> out = new ArrayList<>(cards);
+        int index = -1;
+        for (int i = 0; i < out.size(); i++) {
+            if (forced.equals(out.get(i).affix().id())) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            Affix affix = null;
+            for (Affix a : pool) {
+                if (forced.equals(a.id())) {
+                    affix = a;
+                    break;
+                }
+            }
+            if (affix == null) {
+                targetMissed = true;
+                return cards;
+            }
+            index = out.size() - 1;
+            out.set(index, new DraftCard(affix, rollTier(affix, config.modifierFloor())));
+        }
+        DraftCard hit = out.remove(index);
+        out.add(0, hit);
+        return List.copyOf(out);
+    }
+
     public void choose(int index) {
         requireBuilding("选择");
         switch (phase) {
@@ -632,7 +795,7 @@ public final class BuildSession {
         if (excludeSeen) {
             ensureNotSameAsLastBatch(cards, candidates);
         }
-        return cards;
+        return forceCarrier(cards, candidates);
     }
 
     /**
@@ -703,8 +866,8 @@ public final class BuildSession {
                             + config.modifierPickCount() + " 张");
         }
         shuffle(pool);
-        modifierCards = List.copyOf(toCards(
-                takeDistinct(pool, config.modifierDealCount()), config.modifierFloor()));
+        modifierCards = List.copyOf(forceElement(
+                toCards(takeDistinct(pool, config.modifierDealCount()), config.modifierFloor()), pool));
     }
 
     /** 效果层发牌：按已确定的类型 / 载体 / 元素过滤效果池。 */
@@ -877,6 +1040,7 @@ public final class BuildSession {
                 config.modifierPickCount(),
                 config.effectPickCount(),
                 shapeRerollsLeft,
+                targetMissed,
                 canConfirm(),
                 confirmHint(),
                 confirmedCards(),

@@ -31,6 +31,8 @@ public class BuildException extends RuntimeException {
         CARRIER_REQUIRED,
         /** 候选池过滤后不足以发出本层要求的最小张数。 */
         POOL_TOO_SMALL,
+        /** 定向卡与本局类型不符、词条不存在，或在发牌后才提交。 */
+        TARGET_REJECTED,
         /** 配置本身不合法（启动期就该校验出来）。 */
         BAD_CONFIG
     }

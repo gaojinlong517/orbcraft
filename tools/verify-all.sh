@@ -30,7 +30,8 @@ for cls in \
     com.orbcraft.core.build.BuildSelfTest \
     com.orbcraft.core.target.TargetSelfTest \
     com.orbcraft.core.render.CarrierModelSelfTest \
-    com.orbcraft.core.hatch.HatchPipelineSelfTest
+    com.orbcraft.core.hatch.HatchPipelineSelfTest \
+    com.orbcraft.core.integration.TargetWiringSelfTest
 do
     short=$(echo "$cls" | sed 's/com.orbcraft.core.//')
     out=$(java -cp "$OUT" -Dstdout.encoding=UTF-8 "$cls" 2>&1)
