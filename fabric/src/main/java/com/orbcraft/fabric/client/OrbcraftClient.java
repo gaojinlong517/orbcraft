@@ -1,7 +1,10 @@
 package com.orbcraft.fabric.client;
 
 import com.orbcraft.fabric.OrbcraftMod;
+import com.orbcraft.fabric.net.BuildScreenS2C;
+
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 /**
  * 客户端入口。
@@ -18,6 +21,11 @@ public final class OrbcraftClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        ClientPlayNetworking.registerGlobalReceiver(BuildScreenS2C.ID, (payload, context) ->
+                // 必须切回客户端主线程再开界面：网络回调跑在 netty 线程上，
+                // 在那里碰 Screen / 世界状态会偶发崩溃，而且崩得没有规律。
+                context.client().execute(() ->
+                        context.client().setScreen(new BuildScreenGui(payload.json()))));
         OrbcraftMod.LOG.info("[orbcraft] 客户端初始化完成");
     }
 }

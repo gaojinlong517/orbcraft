@@ -2,7 +2,9 @@ package com.orbcraft.fabric;
 
 import com.orbcraft.fabric.command.OrbBuildCommand;
 import com.orbcraft.fabric.item.OrbItems;
+import com.orbcraft.fabric.net.OrbcraftNet;
 import com.orbcraft.fabric.runtime.OrbcraftRuntime;
+import com.orbcraft.fabric.server.OrbDevCommand;
 import com.orbcraft.fabric.server.ServerRules;
 import com.orbcraft.fabric.spawn.VanillaSummonSpawner;
 import com.orbcraft.fabric.store.OrbcraftStore;
@@ -49,8 +51,10 @@ public final class OrbcraftMod implements ModInitializer {
     public void onInitialize() {
         OrbcraftStore.init();
         OrbItems.init();
+        OrbcraftNet.init();
         VanillaSummonSpawner.init();
         ServerRules.init();
+        OrbDevCommand.init();
         OrbBuildCommand.init();
 
         // 换世界（单人退出存档再进另一个存档）时清掉运行期状态。

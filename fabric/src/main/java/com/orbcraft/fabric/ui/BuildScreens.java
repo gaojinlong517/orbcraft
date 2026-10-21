@@ -1,5 +1,6 @@
 package com.orbcraft.fabric.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -15,6 +16,7 @@ import com.orbcraft.core.quota.QuotaManager;
 import com.orbcraft.core.settle.MaterialTier;
 import com.orbcraft.core.spec.BehaviorMode;
 import com.orbcraft.core.target.TargetAllowance;
+import com.orbcraft.fabric.net.OrbcraftNet;
 import com.orbcraft.fabric.runtime.OrbcraftRuntime;
 
 import net.minecraft.ChatFormatting;
@@ -45,10 +47,39 @@ final class BuildScreens {
     private static final ChatFormatting OK = ChatFormatting.GREEN;
     private static final ChatFormatting BAD = ChatFormatting.RED;
 
+    /**
+     * 这一屏要发给图形界面的按钮。
+     *
+     * <p><b>为什么要靠「记录」而不是「重写一套渲染」。</b> 聊天版已经算好了每一项的
+     * 文案、可用性、命令，再写一遍等于把同一套判断抄两处 —— 两处迟早不一致，
+     * 而玩家分不清哪边是对的。这里让 {@link #button} 顺手登记一份，
+     * 图形界面拿到的必然和聊天里看到的完全一样。
+     *
+     * <p>只在一屏渲染期间有效，{@link #guiBegin} 清空、{@link #guiFlush} 发完即弃。
+     */
+    private static final List<String[]> GUI_BUTTONS = new ArrayList<>();
+
+    /** 这一屏的标题，取第一次 {@link #send} 的非空行。 */
+    private static String guiTitle;
+
+    private static void guiBegin() {
+        GUI_BUTTONS.clear();
+        guiTitle = null;
+    }
+
+    private static void guiFlush(ServerPlayer player) {
+        if (guiTitle != null && !GUI_BUTTONS.isEmpty()) {
+            OrbcraftNet.sendBuildScreen(player, guiTitle, GUI_BUTTONS);
+        }
+        GUI_BUTTONS.clear();
+        guiTitle = null;
+    }
+
     private BuildScreens() {
     }
 
     static void show(ServerPlayer player, BuildSeat seat) {
+        guiBegin();
         if (seat.session() == null) {
             showIdle(player);
             return;
@@ -60,14 +91,17 @@ final class BuildScreens {
             case CANCELLED -> showIdle(player);
             default -> showCards(player, seat, snap);
         }
+        guiFlush(player);
     }
 
     /** 没有进行中的构筑时的落地页。 */
     static void showIdle(ServerPlayer player) {
+        guiBegin();
         send(player, Component.literal("[构筑] 还没有进行中的构筑").withStyle(ACCENT));
         send(player, Component.literal("  ")
                 .append(button("开始构筑", OK, "/orb build", "四层确认：类型 → 形态 → 修饰 → 效果"))
                 .append(Component.literal("  选完四层会出现球的预览，确认后才扣统御力").withStyle(DIM)));
+        guiFlush(player);
     }
 
     // ------------------------------------------------------------------ 类型层
@@ -181,6 +215,7 @@ final class BuildScreens {
     // ------------------------------------------------------------------ 预览
 
     static void showPreview(ServerPlayer player, BuildSeat seat, boolean orbReady) {
+        guiBegin();
         IncubationService.Preview preview = seat.preview();
         Composition comp = seat.session() == null ? null : seat.session().composition().orElse(null);
         if (preview == null || comp == null) {
@@ -215,11 +250,13 @@ final class BuildScreens {
                         allowed ? "/orb submit" : "/orb status",
                         "扣统御力并生成一颗球"),
                 button("返回", ChatFormatting.YELLOW, "/orb status", "回到定稿界面改参数")));
+        guiFlush(player);
     }
 
     // ------------------------------------------------------------------ 定向卡
 
     static void showTargets(ServerPlayer player, BuildSeat seat) {
+        guiBegin();
         TargetAllowance book = OrbcraftRuntime.allowanceOf(seat.ownerKey());
         long today = OrbcraftRuntime.todayEpochDay();
         BaseKind kind = seat.session() == null ? null : seat.session().kind().orElse(null);
@@ -234,6 +271,7 @@ final class BuildScreens {
             }
             send(player, Component.literal("  定向卡绑定类型：先在类型层选好类型，再回来挑").withStyle(DIM));
             send(player, footer(button("返回构筑", ChatFormatting.YELLOW, "/orb status", "回到当前一层")));
+            guiFlush(player);
             return;
         }
 
@@ -264,6 +302,7 @@ final class BuildScreens {
         }
         send(player, Component.literal("  一用就计入今天的额度，不能撤销").withStyle(DIM));
         send(player, footer(button("返回构筑", ChatFormatting.YELLOW, "/orb status", "回到当前一层")));
+        guiFlush(player);
     }
 
     // ------------------------------------------------------------------ 工具
@@ -297,6 +336,8 @@ final class BuildScreens {
      * 这个坑在 1.21 的 {@code Style} 上很容易踩。
      */
     private static MutableComponent button(String label, ChatFormatting color, String command, String hover) {
+        // 顺手登记给图形界面：命令、标签、色调都取自同一个来源，不会和聊天版漂移。
+        GUI_BUTTONS.add(new String[] {label, command, color.getName()});
         return Component.literal("[" + label + "]").withStyle(style -> style
                 .withColor(color)
                 .withClickEvent(new ClickEvent.RunCommand(command))
@@ -342,5 +383,9 @@ final class BuildScreens {
 
     private static void send(ServerPlayer player, Component line) {
         player.displayClientMessage(line, false);
+        if (guiTitle == null && !line.getString().isBlank()) {
+            // 每屏的第一行都是标题（状态行），直接拿它当界面标题，不再单独拼一遍。
+            guiTitle = line.getString();
+        }
     }
 }
