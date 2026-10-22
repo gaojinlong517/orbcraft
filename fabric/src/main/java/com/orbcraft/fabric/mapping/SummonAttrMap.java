@@ -65,6 +65,26 @@ public final class SummonAttrMap {
     /** 「没有这个值」的哨兵。用 NaN 而不是 0：0 血量/0 伤害是合法输入。 */
     public static final double NOT_SET = Double.NaN;
 
+    /**
+     * 单次召唤的只数上限。卡面「召唤数量 +N」是加法词条，多张卡叠上去理论上无界；
+     * 不设上限的话一张满级 swarm 卡能把一屏塞满实体，客户端先卡死的是打开界面的人。
+     */
+    public static final int MAX_SUMMON_COUNT = 8;
+
+    /** {@code Resolution#lifespanTicks()} 的「不限时」哨兵。 */
+    public static final long NO_LIFESPAN = -1L;
+
+    // 生成参数（不落在实体属性上，由 VanillaSummonSpawner 在 spawn 时消费）：
+    //   summonCount     —— 单位「只」，desc「召唤数量 +1」，加法词条；
+    //                      基础 1 只，最终 1 + N（夹在 [1, MAX_SUMMON_COUNT]）
+    //   summonLifespan  —— 单位「秒」，desc「存续时间 +15s」，加法词条。
+    //                      【语义裁决，2026-10-22】数据层没有「基础寿命」字段（Spec 里查无 lifespan），
+    //                      而召唤物默认是永久的，「+15s」字面上对永久物无意义。
+    //                      只有不改数据层就能实现的解释是：堆了该词条的召唤物变成限时召唤，
+    //                      时长 = 各档位之和；没堆的照旧永久。这个解释改变了词条的性价比
+    //                      （限时不一定是增益），要不要改成「全召唤物统一基础寿命 + N 秒」
+    //                      需要数据层（派单书）决策，S3 无权定。
+
     /** 一条属性键最终落到哪个实体属性上，以及乘多少。 */
     public enum Target {
         /** 绝对值加成：加到代理实体自带的基础上。 */
@@ -141,8 +161,8 @@ public final class SummonAttrMap {
             "lifesteal", "lightRadius", "lingering", "lootBonus", "parryChance", "pierce",
             "poisonPotency", "potency", "range", "regen", "reloadSpeed", "resist",
             "rootStrength", "runePower", "shieldAmount", "splashRadius", "stackLimit", "statusChance",
-            "statusDuration", "summonAggro", "summonAoe", "summonCount", "summonCrit", "summonElement",
-            "summonFlySpeed", "summonLifespan", "summonRegen", "summonRevive", "summonSacrifice", "summonStability",
+            "statusDuration", "summonAggro", "summonAoe", "summonCrit", "summonElement",
+            "summonFlySpeed", "summonRegen", "summonRevive", "summonSacrifice", "summonStability",
             "summonStatus", "thorns", "thrustDamage", "triggerRadius", "useSpeed", "xpBonus",
             "yieldBonus"
     );
@@ -177,11 +197,15 @@ public final class SummonAttrMap {
      * @param applied 真的生效了的键
      * @param unwired 已知但本轮不接的键（玩家能感受到「没生效」，但不该当成 bug 查）
      * @param unknown 表里没有的键 —— 数据漂移，调用方必须打 WARN
+     * @param summonCount 该次召唤要生成几只（基础 1 只 + 卡面「召唤数量 +N」，下限 1）
+     * @param lifespanTicks 限时召唤的存活时长（tick）；&le;0 表示不限时
      */
     public record Resolution(SummonStats stats,
                              List<String> applied,
                              List<String> unwired,
-                             List<String> unknown) {
+                             List<String> unknown,
+                             int summonCount,
+                             long lifespanTicks) {
     }
 
     /**
@@ -193,6 +217,8 @@ public final class SummonAttrMap {
         List<String> applied = new ArrayList<>();
         List<String> unwired = new ArrayList<>();
         List<String> unknown = new ArrayList<>();
+        int countExtra = 0;
+        double lifespanSeconds = 0.0;
 
         if (attrs != null) {
             for (Map.Entry<String, Double> e : attrs.entrySet()) {
@@ -207,6 +233,18 @@ public final class SummonAttrMap {
                     } else {
                         unknown.add(key);
                     }
+                    continue;
+                }
+
+                // —— 生成参数不落在实体属性上，单独汇出（单位与语义见 SUMMON_KEYS 注释）
+                if (key.equals("summonCount")) {
+                    countExtra += (int) Math.round(value);
+                    applied.add(key);
+                    continue;
+                }
+                if (key.equals("summonLifespan")) {
+                    lifespanSeconds += value;
+                    applied.add(key);
                     continue;
                 }
 
@@ -241,7 +279,13 @@ public final class SummonAttrMap {
                 acc.getOrDefault(Target.KNOCKBACK_RESIST_FLAT, 0.0),
                 acc.getOrDefault(Target.FOLLOW_RANGE_FLAT, 0.0),
                 acc.getOrDefault(Target.ELEMENT_DAMAGE_PCT, 0.0));
-        return new Resolution(stats, List.copyOf(applied), List.copyOf(unwired), List.copyOf(unknown));
+        int count = Math.max(1, Math.min(MAX_SUMMON_COUNT, 1 + countExtra));
+        // 卡面单位是秒（desc「存续时间 +15s」），落地换算成 tick；只在实际堆了该词条时才限时
+        long lifespanTicks = lifespanSeconds > 0.0
+                ? Math.round(lifespanSeconds * 20.0)
+                : NO_LIFESPAN;
+        return new Resolution(stats, List.copyOf(applied), List.copyOf(unwired), List.copyOf(unknown),
+                count, lifespanTicks);
     }
 
     /** 表里接了多少个键，给诊断与自检用（汇报里要报这个数）。 */

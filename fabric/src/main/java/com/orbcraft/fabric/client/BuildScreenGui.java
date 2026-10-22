@@ -2,6 +2,7 @@ package com.orbcraft.fabric.client;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -438,8 +439,17 @@ public final class BuildScreenGui extends Screen {
             graphics.fill(getX() + getWidth() - 10, getY() + getHeight() / 2 - 2,
                     getX() + getWidth() - 6, getY() + getHeight() / 2 + 2, dot);
 
-            if (hot && font.width(entry.label()) > (getWidth() - TEXT_LEFT - TEXT_RIGHT) * lines.size()) {
-                graphics.setTooltipForNextFrame(Component.literal(entry.label()), mouseX, mouseY);
+            // 悬停兜底：只在主标题被省略号截断时才弹（wrap() 放不下才可能发生），
+            // 不截断也弹会变成「鼠标移过就挡住半屏」。副标题固定跟着透传——
+            // 「词条 N 条 / 品质 · 点数」正是玩家选卡时的判断依据，弹了就要弹全。
+            if (hot && this.active
+                    && font.width(entry.label()) > (getWidth() - TEXT_LEFT - TEXT_RIGHT) * lines.size()) {
+                List<Component> tip = new ArrayList<>();
+                tip.add(Component.literal(entry.label()));
+                if (!entry.detail().isEmpty()) {
+                    tip.add(Component.literal(entry.detail()).withStyle(ChatFormatting.GRAY));
+                }
+                graphics.setTooltipForNextFrame(font, tip, Optional.empty(), mouseX, mouseY);
             }
         }
     }

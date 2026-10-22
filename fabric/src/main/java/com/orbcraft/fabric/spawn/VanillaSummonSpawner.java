@@ -1,5 +1,7 @@
 package com.orbcraft.fabric.spawn;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -93,6 +95,9 @@ public final class VanillaSummonSpawner implements SummonSpawner {
      */
     public static void init() {
         Services.install(INSTANCE);
+        // 限时召唤的到期表：同一处注册，避免「spawner 知道 lifespan、lifespans 知道 despawn」
+        // 这条依赖被拆到两个 init 点后漏接一边
+        SummonLifespans.init();
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             currentServer = server;
             currentLedger = null;
@@ -181,13 +186,93 @@ public final class VanillaSummonSpawner implements SummonSpawner {
             OrbcraftMod.LOG.info("[orbcraft] 召唤 {} 的旧实体 {} 已不存在，按新召唤处理", spec.id(), previous);
         }
 
-        // ---- 外观计划 + 宿主实体
+        // ---- 外观计划（整批共用一份：同一个 Spec 的 N 只当然长一个样）
         SummonAppearance.Plan plan = look.planFor(spec.tags());
         if (!plan.registered()) {
             OrbcraftMod.LOG.warn("[orbcraft] Spec {} 的 tags {} 里没有已登记的载体，外观走占位兜底",
                     spec.id(), spec.tags());
         }
         CarrierModelPlan modelPlan = plan.plan();
+
+        // ---- 数值在落地前解析一次，整批共用：召唤数量与存续时间都是「这一次召唤」的参数，
+        //      不是单只实体自己的属性
+        boolean hasElement = SpecTags.hasElement(spec.tags());
+        SummonAttrMap.Resolution resolution = SummonAttrMap.resolve(spec.attrs(), hasElement);
+        int count = resolution.summonCount();
+        ServerPlayer owner = ownerPlayer(level, ownerKey);
+
+        // ---- 逐只落地。第一只失败才算整次失败（一个都没召出来，要把原因还给玩家）；
+        //      后面的失败降级成「少召了一只」，已经落地的不能陪葬。
+        List<UUID> spawnedIds = new ArrayList<>();
+        SummonStats.ApplyReport firstReport = null;
+        ModelCapability effective = backendCap;
+        for (int i = 0; i < count; i++) {
+            Vec3 spot = count == 1 ? pos : ringSpot(pos, i, count);
+            OneSpawn one = spawnOne(level, spot, spec, ownerKey, owner, ledger, modelPlan, resolution);
+            if (one.failure() != null) {
+                if (spawnedIds.isEmpty()) {
+                    return SpawnResult.failed(one.failure(), backendCap);
+                }
+                OrbcraftMod.LOG.warn("[orbcraft] {} 要召 {} 只，第 {}/{} 只没落地（{}），其余保持不变",
+                        spec.displayName(), count, i + 1, count, one.failure());
+                break;
+            }
+            spawnedIds.add(one.entityId());
+            if (firstReport == null) {
+                firstReport = one.report();
+                effective = one.capability();
+            }
+        }
+
+        logMapping(spec, resolution, firstReport);
+
+        // ---- 限时召唤：到期由 SummonLifespans 在服务器 tick 末尾走 despawnByRuntime 清场。
+        //      只在实际堆了 summonLifespan 时登记（语义裁决见 SummonAttrMap 的注释）
+        if (resolution.lifespanTicks() > 0) {
+            long expireAt = level.getGameTime() + resolution.lifespanTicks();
+            for (UUID id : spawnedIds) {
+                SummonLifespans.register(id, expireAt);
+            }
+            OrbcraftMod.LOG.info("[orbcraft] {} 为限时召唤，{} 秒后消散", spec.displayName(),
+                    resolution.lifespanTicks() / 20.0);
+        }
+
+        OrbcraftMod.LOG.info("[orbcraft] 召唤 {} · {} · {} 只 · 实体 {} · 血量 {} · 攻击 {} · 外观 {}",
+                spec.displayName(), spec.behavior().zh(), spawnedIds.size(),
+                spawnedIds.isEmpty() ? "-" : spawnedIds.get(0),
+                firstReport == null ? -1 : firstReport.health(),
+                firstReport == null ? -1 : firstReport.damage(),
+                effective);
+        return SpawnResult.ok(spawnedIds.isEmpty() ? null : spawnedIds.get(0), effective);
+    }
+
+    /**
+     * 一只召唤物的落地结果。{@code failure} 非空即失败，其余字段只在成功时有意义。
+     * 用 record 而不是异常：本类承诺不抛异常，失败原因要走值返回。
+     */
+    private record OneSpawn(String failure,
+                            UUID entityId,
+                            ModelCapability capability,
+                            SummonStats.ApplyReport report,
+                            boolean proxySubstituted) {
+
+        static OneSpawn fail(String reason) {
+            return new OneSpawn(reason, null, null, null, false);
+        }
+
+        static OneSpawn ok(UUID id, ModelCapability cap, SummonStats.ApplyReport report, boolean proxy) {
+            return new OneSpawn(null, id, cap, report, proxy);
+        }
+    }
+
+    /**
+     * 落地一只。原来这段内联在 spawn 里；接 summonCount 后同一段逻辑要跑 N 次，
+     * 拆出来让「第一只失败=整次失败、后续失败=少一只」的分级语义留在调用方。
+     */
+    private static OneSpawn spawnOne(ServerLevel level, Vec3 pos, Spec spec, String ownerKey,
+                                     ServerPlayer owner, SummonLedger ledger,
+                                     CarrierModelPlan modelPlan, SummonAttrMap.Resolution resolution) {
+        ModelCapability backendCap = appearance().capability();
 
         Entity entity = createEntity(level, modelPlan.proxyEntity());
         boolean proxySubstituted = false;
@@ -201,30 +286,24 @@ public final class VanillaSummonSpawner implements SummonSpawner {
             proxySubstituted = true;
         }
         if (!(entity instanceof Mob mob)) {
-            return SpawnResult.failed("底层没能创建出可以战斗的实体，召唤失败", backendCap);
+            return OneSpawn.fail("底层没能创建出可以战斗的实体，召唤失败");
         }
 
         mob.setPos(pos.x, pos.y, pos.z);
         mob.setCustomName(Component.literal(spec.displayName()));
         mob.setCustomNameVisible(true);
 
-        // ---- 数值：(代理基础值 + 绝对值加成) × (1 + 百分比加成)；单位模型见 SummonStats 类注释
-        boolean hasElement = SpecTags.hasElement(spec.tags());
-        SummonAttrMap.Resolution resolution = SummonAttrMap.resolve(spec.attrs(), hasElement);
         SummonStats.ApplyReport applied = resolution.stats().applyTo(mob);
-        logMapping(spec, resolution, applied);
 
-        // ---- 行为
-        ServerPlayer owner = ownerPlayer(level, ownerKey);
         String rejection = SummonBehaviorBinder.bind(mob, spec, pos, owner, level);
         if (rejection != null) {
             mob.discard();
-            return SpawnResult.failed(rejection, backendCap);
+            return OneSpawn.fail(rejection);
         }
 
         if (!level.addFreshEntity(mob)) {
             mob.discard();
-            return SpawnResult.failed("世界没有接受这个实体（落点所在区块可能未加载），请稍后重试", backendCap);
+            return OneSpawn.fail("世界没有接受这个实体（落点所在区块可能未加载），请稍后重试");
         }
 
         UUID entityId = mob.getUUID();
@@ -236,7 +315,7 @@ public final class VanillaSummonSpawner implements SummonSpawner {
 
         // ---- 外观
         Integer tint = SpecTags.tintOf(SpecTags.elementOf(spec.tags()));
-        SummonAppearance.Attached attached = look.attach(entityId, modelPlan, spec.scalePct(), tint);
+        SummonAppearance.Attached attached = appearance().attach(entityId, modelPlan, spec.scalePct(), tint);
         ModelCapability effective = proxySubstituted ? ModelCapability.NAMED_VANILLA : attached.capability();
         if (effective.shouldWarnPlayer()) {
             // 提示所有权在调用方（当前唯一发送方是 S1 的投掷落地路径）。
@@ -246,13 +325,27 @@ public final class VanillaSummonSpawner implements SummonSpawner {
                     proxySubstituted ? "代理实体不能战斗，已改用 " + COMBAT_FALLBACK_PROXY : attached.note());
         }
 
-        OrbcraftMod.LOG.info("[orbcraft] 召唤 {} · {} · 实体 {} · 血量 {} · 攻击 {} · 外观 {}",
-                spec.displayName(), spec.behavior().zh(), entityId,
-                applied.health(), applied.damage(), effective);
-        return SpawnResult.ok(entityId, effective);
+        return OneSpawn.ok(entityId, effective, applied, proxySubstituted);
+    }
+
+    /**
+     * 多只召唤时把落点摊开成一个小环，避免 N 只叠在同一坐标里互相挤成一团。
+     * 半径 1 格：够散开，又不至于把召唤物放到玩家够不着的地方。
+     */
+    private static Vec3 ringSpot(Vec3 center, int index, int total) {
+        double angle = (Math.PI * 2 * index) / total;
+        return new Vec3(center.x + Math.cos(angle), center.y, center.z + Math.sin(angle));
     }
 
     // ------------------------------------------------------------------ despawn
+
+    /**
+     * 限时召唤到点的清理入口。包内可见：只有 {@link SummonLifespans} 在 tick 里用，
+     * 契约层之外不允许有第二条「让召唤物消失」的路。
+     */
+    static boolean despawnByRuntime(ServerLevel level, UUID entityId) {
+        return INSTANCE.despawn(level, entityId);
+    }
 
     @Override
     public boolean despawn(ServerLevel level, UUID entityId) {
