@@ -27,12 +27,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.orbcraft.core.spec.ProductType;
 import com.orbcraft.core.spec.Rarity;
 import com.orbcraft.core.spec.Spec;
 import com.orbcraft.fabric.OrbcraftMod;
+import com.orbcraft.fabric.item.OrbItems;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
@@ -127,6 +129,40 @@ public final class EquipmentDeployer {
                 AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL, true));
         RULES.put("attackSpeed", new AttrRule("攻击速度", Attributes.ATTACK_SPEED,
                 AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL, true));
+        // 硬直抵抗 = 被打时少被击退。原版没有「硬直」，击退抗性是最贴近的落地，
+        // 换算口径与召唤物侧 SummonAttrMap.staggerResist 一致（百分比 → 0~1）
+        RULES.put("staggerResist", new AttrRule("硬直抵抗", Attributes.KNOCKBACK_RESISTANCE,
+                AttributeModifier.Operation.ADD_VALUE, true));
+        RULES.put("impactPower", new AttrRule("冲击力", Attributes.ATTACK_KNOCKBACK,
+                AttributeModifier.Operation.ADD_VALUE, false));
+    }
+
+    /**
+     * 格挡类词条：原版没有对应属性，走 {@code EquipmentCombat} 的受击事件结算，
+     * 这里只负责把词条写进 lore 让玩家看得见。
+     *
+     * <p>语义口径（与卡面 desc 对齐，改前先看卡表）：
+     * <ul>
+     *   <li>{@code blockChance} 格挡率 —— 受击自动格挡的概率，格挡 = 本次伤害归零；</li>
+     *   <li>{@code blockPower} 格挡强度 —— 举盾格挡（原版右键）时额外减免的百分比；</li>
+     *   <li>{@code parryChance} 招架率 —— 受击自动招架的概率，招架 = 伤害归零 + 攻击者短暂虚弱；</li>
+     *   <li>{@code shieldAmount} 护盾值 —— 优先于生命的吸收池，脱战缓慢回充；</li>
+     *   <li>{@code thorns} 荆棘 —— 受击时反弹给攻击者的固定伤害；</li>
+     *   <li>{@code resist} 抗性 —— 所有伤害的固定百分比减免。</li>
+     * </ul>
+     * 格挡/招架共用一个随机判定顺序：先判格挡，没中再判招架。
+     */
+    private static final Map<String, String> COMBAT_KEYS = new LinkedHashMap<>();
+    private static final Set<String> PERCENT_KEYS = Set.of(
+            "blockChance", "blockPower", "parryChance", "resist");
+
+    static {
+        COMBAT_KEYS.put("blockChance", "格挡率");
+        COMBAT_KEYS.put("blockPower", "格挡强度");
+        COMBAT_KEYS.put("parryChance", "招架率");
+        COMBAT_KEYS.put("shieldAmount", "护盾值");
+        COMBAT_KEYS.put("thorns", "荆棘");
+        COMBAT_KEYS.put("resist", "抗性");
     }
 
     private EquipmentDeployer() {
@@ -165,7 +201,10 @@ public final class EquipmentDeployer {
         for (Map.Entry<String, Double> entry : spec.attrs().entrySet()) {
             AttrRule rule = RULES.get(entry.getKey());
             if (rule == null) {
-                unapplied.add(entry.getKey());
+                // 格挡类词条由 EquipmentCombat 处理、耐久单独处理：这两者不算「未落地」
+                if (!COMBAT_KEYS.containsKey(entry.getKey()) && !"durability".equals(entry.getKey())) {
+                    unapplied.add(entry.getKey());
+                }
                 continue;
             }
             double raw = entry.getValue();
@@ -186,6 +225,42 @@ public final class EquipmentDeployer {
         }
         if (anyApplied) {
             stack.set(DataComponents.ATTRIBUTE_MODIFIERS, mods.build());
+        }
+
+        // ---- 格挡类词条：不落属性，写 lore + 存进组件，由 EquipmentCombat 受击时结算
+        List<String> combatApplied = new ArrayList<>();
+        for (Map.Entry<String, Double> entry : spec.attrs().entrySet()) {
+            String label = COMBAT_KEYS.get(entry.getKey());
+            if (label == null) {
+                unapplied.add(entry.getKey());
+                continue;
+            }
+            double raw = entry.getValue();
+            if (raw == 0.0) {
+                continue;
+            }
+            combatApplied.add(entry.getKey());
+            lore.add(Component.literal((raw > 0 ? "+" : "") + trim(raw)
+                    + (PERCENT_KEYS.contains(entry.getKey()) ? "% " : " ") + label));
+        }
+
+        // ---- 数值跟着物品走：EquipmentCombat 受击时现读现算，物品在哪数值就在哪
+        if (!combatApplied.isEmpty()) {
+            net.minecraft.nbt.CompoundTag attrs = new net.minecraft.nbt.CompoundTag();
+            for (String key : combatApplied) {
+                attrs.putDouble(key, spec.attrs().get(key));
+            }
+            net.minecraft.nbt.CompoundTag data = new net.minecraft.nbt.CompoundTag();
+            data.put("attrs", attrs);
+            stack.set(OrbItems.EQUIPMENT, data);
+        }
+
+        // 耐久词条：按比例放大原版耐久上限（替代品也有耐久，跟着放大即可）
+        double durabilityPct = spec.attrs().getOrDefault("durability", 0.0);
+        if (durabilityPct != 0.0 && stack.getMaxDamage() > 0) {
+            int scaled = Math.max(1, (int) Math.round(stack.getMaxDamage() * (1.0 + durabilityPct / 100.0)));
+            stack.set(DataComponents.MAX_DAMAGE, scaled);
+            lore.add(Component.literal("+" + trim(durabilityPct) + "% 耐久"));
         }
 
         stack.set(DataComponents.ITEM_NAME, Component.literal(spec.displayName()));

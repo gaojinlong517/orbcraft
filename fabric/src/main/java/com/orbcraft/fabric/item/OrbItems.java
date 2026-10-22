@@ -58,6 +58,25 @@ public final class OrbItems {
                     .build());
 
     /**
+     * 装备数据组件 —— 装备上唯一的载荷，内容是 {@code attrs}（属性键 → 数值）。
+     *
+     * <p><b>为什么装备数值要跟着物品走而不是登记在玩家身上。</b> 装备会被捡起、
+     * 丢出、放进箱子、被别人捡走：登记在玩家身上就意味着要在每个容器事件里
+     * 追踪一件物品的去向，漏一条就是「装备复制/蒸发」级 bug。挂在物品上，
+     * 物品在哪数值就在哪，{@code EquipmentCombat} 受击时现读现算。
+     *
+     * <p><b>必须同步到客户端</b>，理由与 {@link #TICKET} 相同：创造模式挪格子时
+     * 客户端会把物品回传，组件不同步的话挪一下装备数值就没了。
+     */
+    public static final DataComponentType<CompoundTag> EQUIPMENT = Registry.register(
+            BuiltInRegistries.DATA_COMPONENT_TYPE,
+            Identifier.fromNamespaceAndPath(NAMESPACE, "equipment"),
+            DataComponentType.<CompoundTag>builder()
+                    .persistent(CompoundTag.CODEC)
+                    .networkSynchronized(ByteBufCodecs.COMPOUND_TAG)
+                    .build());
+
+    /**
      * 球物品本体。
      *
      * <p>堆叠上限 1：每颗球带自己的票据与进度，堆在一起就不能分别读条了。

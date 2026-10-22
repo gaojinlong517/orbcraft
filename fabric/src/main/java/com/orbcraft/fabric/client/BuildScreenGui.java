@@ -68,6 +68,13 @@ public final class BuildScreenGui extends Screen {
     private int dividerY = -1;
     private int hintY;
 
+    /** 列表区滚动状态：窗口装不下卡片时启用。 */
+    private int scrollY;
+    private int maxScroll;
+    private int listTop;
+    private int listBottom;
+    private final List<CardButton> optionButtons = new ArrayList<>();
+
     /** 一条可点项。 */
     private record Entry(String label, String command, ChatFormatting tone, boolean chosen,
                          boolean action, String icon, String detail) {
@@ -160,50 +167,104 @@ public final class BuildScreenGui extends Screen {
 
         int rows = options.isEmpty() ? 0 : (options.size() + columns - 1) / columns;
         List<List<Entry>> actionRows = packActions(font, actions, panelWidth - PAD * 2);
-        int actionBlock = actionRows.isEmpty() ? 0
-                : 12 + 1 + GAP + actionRows.size() * (ACTION_H + GAP) - GAP;
+        int actionBlockH = actionRows.isEmpty() ? 0
+                : actionRows.size() * (ACTION_H + GAP) - GAP;
 
+        // —— 高度分三块：头部(headBlock) + 可滚动卡片(listContent) + 尾部(tailBlock 分隔线+动作+提示)
+        //     窗口装不下时不撑大屏幕，改为卡片区滚动；面板最小 140px 留点底。
         int bodyTop = PAD + headerHeight + GAP;
-        panelHeight = bodyTop + rows * (cardHeight + GAP) + (rows > 0 ? -GAP : 0)
-                + actionBlock + GAP + LINE_H + PAD;
+        int listContent = rows > 0 ? rows * (cardHeight + GAP) - GAP : 0;
+        int dividerGap = actionRows.isEmpty() ? 0 : 12 + 1 + GAP;
+        int tailBlock = (rows > 0 || !actionRows.isEmpty() ? GAP : 0)
+                + LINE_H + PAD + dividerGap + actionBlockH;
+
+        int natural = bodyTop + listContent + tailBlock;
         panelLeft = (this.width - panelWidth) / 2;
+        panelHeight = Math.min(natural, Math.max(140, this.height - 24));
         panelTop = Math.max(12, (this.height - panelHeight) / 2);
 
-        int y = panelTop + bodyTop;
+        int listTop = panelTop + bodyTop;
+        int listBottom = panelTop + panelHeight - tailBlock;
+        maxScroll = Math.max(0, listContent - (listBottom - listTop));
+        scrollY = 0;
+
+        // 选项卡片：基准 Y 从 listTop 起，滚动时整体平移；动作按钮不参与滚动。
+        optionButtons.clear();
         for (int i = 0; i < options.size(); i++) {
             Entry entry = options.get(i);
             int x = panelLeft + PAD + (i % columns) * (cardWidth + GAP);
-            int top = y + (i / columns) * (cardHeight + GAP);
-            placed.add(new Placed(entry, x, top, cardWidth, cardHeight,
-                    wrap(font, entry.label(), cardWidth - TEXT_LEFT - TEXT_RIGHT, 2)));
-        }
-        if (rows > 0) {
-            y += rows * (cardHeight + GAP) - GAP;
+            int baseTop = listTop + (i / columns) * (cardHeight + GAP);
+            CardButton btn = new CardButton(
+                    new Placed(entry, x, baseTop, cardWidth, cardHeight,
+                            wrap(font, entry.label(), cardWidth - TEXT_LEFT - TEXT_RIGHT, 2)),
+                    baseTop, ignored -> run(entry.command()));
+            optionButtons.add(btn);
+            addRenderableWidget(btn);
         }
 
-        if (!actionRows.isEmpty()) {
-            dividerY = y + 12;
-            int rowTop = dividerY + 1 + GAP;
-            for (List<Entry> row : actionRows) {
-                int cursorRight = panelLeft + panelWidth - PAD;
-                for (int i = row.size() - 1; i >= 0; i--) {
-                    Entry entry = row.get(i);
-                    int w = Math.max(64, font.width(entry.label()) + 20);
-                    cursorRight -= w;
-                    placed.add(new Placed(entry, cursorRight, rowTop, w, ACTION_H,
-                            wrap(font, entry.label(), w - 14, 1)));
-                    cursorRight -= GAP;
-                }
-                rowTop += ACTION_H + GAP;
+        int rowTop = panelTop + panelHeight - PAD - LINE_H - GAP - actionBlockH;
+        dividerY = actionRows.isEmpty() ? -1 : rowTop - GAP - 1;
+        for (List<Entry> row : actionRows) {
+            int cursorRight = panelLeft + panelWidth - PAD;
+            for (int i = row.size() - 1; i >= 0; i--) {
+                Entry entry = row.get(i);
+                int w = Math.max(64, font.width(entry.label()) + 20);
+                cursorRight -= w;
+                Placed p = new Placed(entry, cursorRight, rowTop, w, ACTION_H,
+                        wrap(font, entry.label(), w - 14, 1));
+                addRenderableWidget(new CardButton(p, rowTop, ignored -> run(entry.command())));
+                cursorRight -= GAP;
             }
-            y = rowTop - GAP;
+            rowTop += ACTION_H + GAP;
         }
 
-        hintY = y + GAP + 2;
+        hintY = panelTop + panelHeight - PAD - LINE_H;
+        applyScroll();
+    }
 
-        for (Placed p : placed) {
-            addRenderableWidget(new CardButton(p, ignored -> run(p.entry().command())));
+    /**
+     * 把滚动偏移应用到选项卡片，并裁剪掉滚出列表区的卡片（避免它们画到标题/动作区上）。
+     * 动作按钮不在 {@code optionButtons} 里，滚动不影响。
+     */
+    private void applyScroll() {
+        int shift = maxScroll > 0 ? scrollY : 0;
+        for (CardButton b : optionButtons) {
+            int y = b.baseTop() - shift;
+            b.setY(y);
+            b.visible = y + b.getHeight() > listTop && y < listBottom;
         }
+    }
+
+    private void setScroll(int value) {
+        int next = Math.max(0, Math.min(maxScroll, value));
+        if (next == scrollY) {
+            return;
+        }
+        scrollY = next;
+        applyScroll();
+        if (getFocused() instanceof CardButton focus && !focus.visible) {
+            ensureVisible(focus);
+        }
+    }
+
+    /** 焦点卡片被滚动出视野时，把它滚回视野内（键盘 Tab 导航用）。 */
+    private void ensureVisible(CardButton b) {
+        int h = b.getHeight();
+        if (b.baseTop() - scrollY < listTop) {
+            setScroll(b.baseTop() - listTop);
+        } else if (b.baseTop() - scrollY + h > listBottom) {
+            setScroll(b.baseTop() - (listBottom - h));
+        }
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (maxScroll > 0 && mouseX >= panelLeft && mouseX <= panelLeft + panelWidth
+                && mouseY >= panelTop && mouseY <= panelTop + panelHeight) {
+            setScroll(this.scrollY + (int) Math.signum(scrollY) * 28);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     private static int maxLines(Font font, List<Entry> entries, int textWidth) {
@@ -378,78 +439,96 @@ public final class BuildScreenGui extends Screen {
         }
     }
 
-    private static final class CardButton extends Button {
+    private final class CardButton extends Button {
 
         private final Placed data;
+        /** 选项卡片的基准顶部 Y（不含滚动偏移）；动作按钮恒等于自身 y。 */
+        private final int baseTop;
 
-        CardButton(Placed data, OnPress onPress) {
-            super(data.x(), data.y(), data.w(), data.h(),
+        CardButton(Placed data, int baseTop, OnPress onPress) {
+            super(data.x(), baseTop, data.w(), data.h(),
                     Component.literal(data.entry().label()), onPress, Button.DEFAULT_NARRATION);
             this.data = data;
+            this.baseTop = baseTop;
+        }
+
+        int baseTop() {
+            return baseTop;
         }
 
         @Override
         protected void renderContents(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             Font font = Minecraft.getInstance().font;
             Entry entry = data.entry();
-            boolean hot = isHoveredOrFocused();
-            int background = !this.active ? CARD_BG_DISABLED : (hot ? CARD_BG_HOVER : CARD_BG);
-            graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), background);
-            outline(graphics, getX(), getY(), getWidth(), getHeight(),
-                    hot && this.active ? CARD_BORDER_HOVER : CARD_BORDER);
+            // 选项卡片滚出列表区时裁剪，避免画到标题/动作区上；动作按钮不参与滚动不裁剪。
+            boolean clip = !entry.action() && maxScroll > 0;
+            if (clip) {
+                graphics.enableScissor(panelLeft + 1, listTop, panelLeft + panelWidth - 1, listBottom);
+            }
+            try {
+                boolean hot = isHoveredOrFocused();
+                int background = !this.active ? CARD_BG_DISABLED : (hot ? CARD_BG_HOVER : CARD_BG);
+                graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), background);
+                outline(graphics, getX(), getY(), getWidth(), getHeight(),
+                        hot && this.active ? CARD_BORDER_HOVER : CARD_BORDER);
 
-            int baseColor = !this.active ? TEXT_DISABLED
-                    : (entry.chosen() ? toneColor(entry.tone()) : TEXT);
+                int baseColor = !this.active ? TEXT_DISABLED
+                        : (entry.chosen() ? toneColor(entry.tone()) : TEXT);
 
-            if (entry.action()) {
-                int centerY = getY() + (getHeight() - LINE_H) / 2;
-                for (String line : data.lines()) {
-                    graphics.drawString(font, line,
-                            getX() + (getWidth() - font.width(line)) / 2, centerY, baseColor, false);
-                    centerY += LINE_H;
+                if (entry.action()) {
+                    int centerY = getY() + (getHeight() - LINE_H) / 2;
+                    for (String line : data.lines()) {
+                        graphics.drawString(font, line,
+                                getX() + (getWidth() - font.width(line)) / 2, centerY, baseColor, false);
+                        centerY += LINE_H;
+                    }
+                    return;
                 }
-                return;
-            }
 
-            // 选中态：左侧 3px 色条 + 文字变色
-            if (entry.chosen()) {
-                graphics.fill(getX() + 1, getY() + 1, getX() + 4, getY() + getHeight() - 1, baseColor);
-            }
+                // 选中态：左侧 3px 色条 + 文字变色
+                if (entry.chosen()) {
+                    graphics.fill(getX() + 1, getY() + 1, getX() + 4, getY() + getHeight() - 1, baseColor);
+                }
 
-            // 图标与主标题块垂直居中对齐
-            drawIcon(graphics, entry.icon(), getX() + 8, getY() + CARD_PAD_Y - 1,
-                    this.active ? toneColor(entry.tone()) : TEXT_DISABLED);
+                // 图标与主标题块垂直居中对齐
+                drawIcon(graphics, entry.icon(), getX() + 8, getY() + CARD_PAD_Y - 1,
+                        this.active ? toneColor(entry.tone()) : TEXT_DISABLED);
 
-            List<String> lines = data.lines();
-            int total = lines.size() + (entry.detail().isEmpty() ? 0 : 1);
-            int blockHeight = total * LINE_H - 2;
-            int textY = getY() + (getHeight() - blockHeight) / 2;
-            int textX = getX() + TEXT_LEFT;
+                List<String> lines = data.lines();
+                int total = lines.size() + (entry.detail().isEmpty() ? 0 : 1);
+                int blockHeight = total * LINE_H - 2;
+                int textY = getY() + (getHeight() - blockHeight) / 2;
+                int textX = getX() + TEXT_LEFT;
 
-            for (String line : lines) {
-                graphics.drawString(font, line, textX, textY, baseColor, false);
-                textY += LINE_H;
-            }
-            if (!entry.detail().isEmpty()) {
-                graphics.drawString(font, entry.detail(), textX, textY, TEXT_MUTED, false);
-            }
-
-            // 右侧状态点：可用（色调）/ 不可用（暗灰）
-            int dot = this.active ? toneColor(entry.tone()) : TEXT_DISABLED;
-            graphics.fill(getX() + getWidth() - 10, getY() + getHeight() / 2 - 2,
-                    getX() + getWidth() - 6, getY() + getHeight() / 2 + 2, dot);
-
-            // 悬停兜底：只在主标题被省略号截断时才弹（wrap() 放不下才可能发生），
-            // 不截断也弹会变成「鼠标移过就挡住半屏」。副标题固定跟着透传——
-            // 「词条 N 条 / 品质 · 点数」正是玩家选卡时的判断依据，弹了就要弹全。
-            if (hot && this.active
-                    && font.width(entry.label()) > (getWidth() - TEXT_LEFT - TEXT_RIGHT) * lines.size()) {
-                List<Component> tip = new ArrayList<>();
-                tip.add(Component.literal(entry.label()));
+                for (String line : lines) {
+                    graphics.drawString(font, line, textX, textY, baseColor, false);
+                    textY += LINE_H;
+                }
                 if (!entry.detail().isEmpty()) {
-                    tip.add(Component.literal(entry.detail()).withStyle(ChatFormatting.GRAY));
+                    graphics.drawString(font, entry.detail(), textX, textY, TEXT_MUTED, false);
                 }
-                graphics.setTooltipForNextFrame(font, tip, Optional.empty(), mouseX, mouseY);
+
+                // 右侧状态点：可用（色调）/ 不可用（暗灰）
+                int dot = this.active ? toneColor(entry.tone()) : TEXT_DISABLED;
+                graphics.fill(getX() + getWidth() - 10, getY() + getHeight() / 2 - 2,
+                        getX() + getWidth() - 6, getY() + getHeight() / 2 + 2, dot);
+
+                // 悬停兜底：只在主标题被省略号截断时才弹（wrap() 放不下才可能发生），
+                // 不截断也弹会变成「鼠标移过就挡住半屏」。副标题固定跟着透传——
+                // 「词条 N 条 / 品质 · 点数」正是玩家选卡时的判断依据，弹了就要弹全。
+                if (hot && this.active
+                        && font.width(entry.label()) > (getWidth() - TEXT_LEFT - TEXT_RIGHT) * lines.size()) {
+                    List<Component> tip = new ArrayList<>();
+                    tip.add(Component.literal(entry.label()));
+                    if (!entry.detail().isEmpty()) {
+                        tip.add(Component.literal(entry.detail()).withStyle(ChatFormatting.GRAY));
+                    }
+                    graphics.setTooltipForNextFrame(font, tip, Optional.empty(), mouseX, mouseY);
+                }
+            } finally {
+                if (clip) {
+                    graphics.disableScissor();
+                }
             }
         }
     }
