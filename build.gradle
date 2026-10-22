@@ -1,7 +1,7 @@
 plugins {
     // plugin id 用 `fabric-loom`，与 Fabric API 1.21.11 分支保持一致。
     // 新 id `net.fabricmc.fabric-loom` 是 26.x 那一代模板的写法；1.21.11 上
-    // 两者都能解析到同一个实现，但版本必须锁在 1.13.3（原因见 gradle.properties）。
+    // 两者都能解析到同一个实现，但版本必须锁在 1.15.3（原因见 gradle.properties）。
     id 'fabric-loom' version "${loom_version}"
 }
 
@@ -35,16 +35,65 @@ sourceSets {
 repositories {
     // Loom 会自动加入 Minecraft / Fabric 的仓库，这里只补标准仓库。
     mavenCentral()
+
+    // ---- 第三方开源库的 maven 来源 ----
+    // 每个库的作者、许可证、引入理由都记录在 docs/ACKNOWLEDGMENTS.md，
+    // 增删依赖前先读它，尤其是许可证红线那一节。
+    maven { name = 'WispForest'; url 'https://maven.wispforest.io' }          // owo-lib
+    maven { name = 'Redlance'; url 'https://repo.redlance.org/public' }       // PAL
+    maven { name = 'BlazingCoop'; url 'https://maven.blazing-coop.net/releases' } // Flan API
+    // owo-lib 0.13 的传递依赖 kdl4j（KDL 配置解析器）只发布在 JitPack。
+    maven { name = 'JitPack'; url 'https://jitpack.io'
+            content { includeGroup 'com.github.kdl-org' } }
+    // BetterModel 2.2.0（1.21.11 适配版）只发布在 Modrinth Maven。
+    exclusiveContent {
+        forRepository {
+            maven { name = 'Modrinth'; url 'https://api.modrinth.com/maven' }
+        }
+        filter { includeGroup 'maven.modrinth' }
+    }
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
 
-    // 1.13.3 这一代的 Loom 仍用 modImplementation：它会把依赖 remap 到
-    // 开发环境的命名空间。写成普通 implementation 会在运行时找不到类。
+    // modImplementation：它会把依赖 remap 到开发环境的命名空间。写成普通
+    // implementation 会在运行时找不到类。
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // ---------------------------------------------------------------- 第三方开源依赖
+    //
+    // 引入理由、作者署名与许可证统一记录在 docs/ACKNOWLEDGMENTS.md。
+    // 版本一律来自 gradle.properties（全项目唯一版本来源）。
+
+    // owo-lib（wisp-forest，MIT）：声明式 UI / 配置 / 网络。
+    // include 的不是库本体而是官方 sentinel（约几十 KB）：玩家没装 owo 时
+    // 弹提示并引导自动下载，而不是把 2MB 本体塞进我们的 jar。
+    modImplementation "io.wispforest:owo-lib:${project.owo_version}"
+    include "io.wispforest:owo-sentinel:${project.owo_version}"
+
+    // PAL / PlayerAnimationLibFabric（ZigyTheBird，MIT）：玩家模型动画，
+    // 施法/投掷的玩家侧动画走它。实体外观走 BetterModel，职责不重叠。
+    // include 进 jar：客户端动画库是硬需求，玩家不该为此手动装第二个 mod。
+    modImplementation "com.zigythebird.playeranim:PlayerAnimationLibFabric:${project.pal_version}"
+    include "com.zigythebird.playeranim:PlayerAnimationLibFabric:${project.pal_version}"
+
+    // fabric-permissions-api（lucko，MIT，约 12KB）：命令权限检查。
+    // LuckPerms 等权限插件在场时按 orbcraft.admin 节点细粒度授权，
+    // 不在场时回退原版等级 2。桥接代码在 AdminPermissions。
+    modImplementation "me.lucko:fabric-permissions-api:${project.fabric_permissions_version}"
+    include "me.lucko:fabric-permissions-api:${project.fabric_permissions_version}"
+
+    // BetterModel（toxicity188，MIT）：可选实体外观后端。
+    // 按选型文档的三条约束执行：只连 API、不 include、不进 fabric.mod.json 的
+    // depends——缺它时 core 的 ModelBackends 自动退化，玩家照样进服。
+    modCompileOnly "maven.modrinth:4h8rX3rt:${project.bettermodel_file_id}"
+
+    // Flan（Flemmli97，ARR）：可选领地兼容，仅调用公开 API。
+    // transitive=false：API jar 的可选依赖与本构建无关，不去解析。
+    modCompileOnly("io.github.flemmli97:flan:${project.flan_version}:api") { transitive = false }
 }
 
 // ---------------------------------------------------------------- 双 run 配置
