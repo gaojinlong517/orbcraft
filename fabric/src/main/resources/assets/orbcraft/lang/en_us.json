@@ -1,5 +1,7 @@
 {
   "item.orbcraft.orb": "Incubation Orb",
+  "item.orbcraft.staff": "Staff",
+  "item.orbcraft.gun": "Caster Gun",
   "key.orbcraft.build_menu": "Open Orb Build Menu",
   "key.categories.orbcraft": "Orbcraft"
 }

@@ -4,6 +4,7 @@ import com.orbcraft.fabric.OrbcraftMod;
 import com.orbcraft.fabric.contract.OrbItemContract;
 import com.orbcraft.fabric.contract.Services;
 import com.orbcraft.fabric.entity.orb.OrbEntities;
+import com.orbcraft.fabric.equip.OrbCasterItem;
 
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentType;
@@ -38,6 +39,8 @@ public final class OrbItems {
 
     private static final Identifier ITEM_ID = Identifier.fromNamespaceAndPath(NAMESPACE, "orb");
     private static final Identifier TICKET_ID = Identifier.fromNamespaceAndPath(NAMESPACE, "ticket");
+    private static final Identifier STAFF_ID = Identifier.fromNamespaceAndPath(NAMESPACE, "staff");
+    private static final Identifier GUN_ID = Identifier.fromNamespaceAndPath(NAMESPACE, "gun");
 
     /**
      * 票据组件 —— 球上唯一的载荷。
@@ -100,6 +103,25 @@ public final class OrbItems {
      * 但正常调用请走 {@code Services.orbItem()}，那是全项目约定的取用点。
      */
     public static final OrbItemContractImpl CONTRACT = new OrbItemContractImpl();
+
+    /**
+     * 法杖 —— 右键发射魔法弹的武器。{@code baseDamage} 是兜底伤害，
+     * 构筑时 {@code damage} 词条会再加成（见 {@link OrbCasterItem}）。
+     */
+    public static final Item STAFF = Registry.register(
+            BuiltInRegistries.ITEM,
+            STAFF_ID,
+            new OrbCasterItem(new Item.Properties()
+                    .setId(ResourceKey.create(Registries.ITEM, STAFF_ID)), 4.0F, 1.5F, 16));
+
+    /**
+     * 法杖枪 —— 比法杖更快、伤害更高、更准的远程武器。同样的发射机制，参数更激进。
+     */
+    public static final Item GUN = Registry.register(
+            BuiltInRegistries.ITEM,
+            GUN_ID,
+            new OrbCasterItem(new Item.Properties()
+                    .setId(ResourceKey.create(Registries.ITEM, GUN_ID)), 6.0F, 2.2F, 12));
 
     private static boolean installed;
 

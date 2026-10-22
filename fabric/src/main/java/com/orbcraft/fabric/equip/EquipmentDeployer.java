@@ -91,9 +91,12 @@ public final class EquipmentDeployer {
         BASES.put("crossbow", new BaseItem(Items.CROSSBOW, EquipmentSlotGroup.MAINHAND, false));
         BASES.put("shield", new BaseItem(Items.SHIELD, EquipmentSlotGroup.OFFHAND, false));
         BASES.put("armor", new BaseItem(Items.IRON_CHESTPLATE, EquipmentSlotGroup.ARMOR, false));
-        // 以下四个原版没有对应物，选最近的替代品并标记为占位。
-        BASES.put("gun", new BaseItem(Items.CROSSBOW, EquipmentSlotGroup.MAINHAND, true));
-        BASES.put("staff", new BaseItem(Items.BLAZE_ROD, EquipmentSlotGroup.MAINHAND, true));
+        // 法杖 / 枪：自定义武器，右键发射魔法弹（弹丸伤害随攻击力词条提升）。
+        // 用 true 占位只针对「外观仍是原版贴图」这一事实；行为已完整，不再写「外观为占位」困扰玩家。
+        BASES.put("gun", new BaseItem(OrbItems.GUN, EquipmentSlotGroup.MAINHAND, false));
+        BASES.put("staff", new BaseItem(OrbItems.STAFF, EquipmentSlotGroup.MAINHAND, false));
+        // 以下三个原版没有对应物，选最近的替代品并标记为占位。
+        // 注意：法杖 / 枪已改为自定义 OrbCasterItem（右键发射魔法弹），不在占位之列。
         BASES.put("dagger", new BaseItem(Items.IRON_SWORD, EquipmentSlotGroup.MAINHAND, true));
         BASES.put("gauntlet", new BaseItem(Items.IRON_INGOT, EquipmentSlotGroup.MAINHAND, true));
     }
@@ -244,15 +247,23 @@ public final class EquipmentDeployer {
                     + (PERCENT_KEYS.contains(entry.getKey()) ? "% " : " ") + label));
         }
 
-        // ---- 数值跟着物品走：EquipmentCombat 受击时现读现算，物品在哪数值就在哪
-        if (!combatApplied.isEmpty()) {
-            net.minecraft.nbt.CompoundTag attrs = new net.minecraft.nbt.CompoundTag();
-            for (String key : combatApplied) {
-                attrs.putDouble(key, spec.attrs().get(key));
-            }
+        // ---- 数值跟着物品走：EquipmentCombat 受击时现读现算，物品在哪数值就在哪。
+        // 同时把载体短 id 写进组件，供 EquipmentRules 判定单/双手互斥（方向 A）。
+        {
             net.minecraft.nbt.CompoundTag data = new net.minecraft.nbt.CompoundTag();
-            data.put("attrs", attrs);
-            stack.set(OrbItems.EQUIPMENT, data);
+            if (carrier != null) {
+                data.putString("carrier", carrier);
+            }
+            if (!combatApplied.isEmpty()) {
+                net.minecraft.nbt.CompoundTag attrs = new net.minecraft.nbt.CompoundTag();
+                for (String key : combatApplied) {
+                    attrs.putDouble(key, spec.attrs().get(key));
+                }
+                data.put("attrs", attrs);
+            }
+            if (!data.isEmpty()) {
+                stack.set(OrbItems.EQUIPMENT, data);
+            }
         }
 
         // 耐久词条：按比例放大原版耐久上限（替代品也有耐久，跟着放大即可）

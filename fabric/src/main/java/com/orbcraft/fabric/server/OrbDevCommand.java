@@ -4,8 +4,10 @@ import java.util.List;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.orbcraft.core.hatch.HatchSnapshot;
 import com.orbcraft.core.hatch.HatchTicket;
 import com.orbcraft.core.hatch.IncubationService;
+import com.orbcraft.core.quota.QuotaManager;
 import com.orbcraft.fabric.contract.PlayerStore;
 import com.orbcraft.fabric.contract.Services;
 import com.orbcraft.fabric.runtime.OrbcraftRuntime;
@@ -59,7 +61,11 @@ public final class OrbDevCommand {
                 .then(Commands.literal("hatch")
                         .executes(ctx -> skipHatch(ctx.getSource())))
                 .then(Commands.literal("tickets")
-                        .executes(ctx -> listTickets(ctx.getSource())));
+                        .executes(ctx -> listTickets(ctx.getSource())))
+                .then(Commands.literal("quota")
+                        .executes(ctx -> showDevQuota(ctx.getSource()))
+                        .then(Commands.literal("reset")
+                                .executes(ctx -> resetDevQuota(ctx.getSource()))));
     }
 
     /**
@@ -149,5 +155,56 @@ public final class OrbDevCommand {
             source.sendSuccess(() -> Component.literal(line), false);
         }
         return tickets.size();
+    }
+
+    /** 只读：看自己的配额占用，排「为什么造不了」时不用翻管理员日志。 */
+    private static int showDevQuota(CommandSourceStack source) {
+        ServerPlayer self = source.getPlayer();
+        if (self == null) {
+            source.sendFailure(Component.literal("这个命令只能由玩家执行"));
+            return 0;
+        }
+        String ownerKey = PlayerStore.ownerKeyOf(self.getUUID());
+        QuotaManager.State state = OrbcraftRuntime.hatch().stateOf(ownerKey);
+        int inflight = OrbcraftRuntime.hatch().ticketsOf(ownerKey).stream()
+                .filter(t -> t.occupiesSlot()).toArray().length;
+        source.sendSuccess(() -> Component.literal("你的配额 · 装备 " + state.equipment() + "/" + QuotaManager.MAX_EQUIPMENT
+                + " · 主宠 " + state.primary() + "/" + QuotaManager.MAX_PRIMARY
+                + " · 混乱 " + state.chaos() + "/" + QuotaManager.MAX_CHAOS
+                + " · 统御力 " + state.usedPoints() + "/" + QuotaManager.POOL_SIZE
+                + " · 在途 " + inflight), false);
+        return 1;
+    }
+
+    /**
+     * 把本人的造物配额重置为空，方便反复测试。
+     *
+     * <p><b>为什么走 {@code restore} 而不是改 {@code QuotaManager}。</b> 配额引擎只有
+     * {@code tryConsume} 没有 release/refund（设计如此：统御力是消耗品不是每日刷新），
+     * 平台层没有任何「合法的减配额」入口。{@code restore} 提供唯一一条：传一份空配额 +
+     * 空票据的断面，它发现「存盘值没有被在途票据拉高」就直接采用空值。
+     * 已在途（充能/已就绪/已投出）的球仍占配额，不会被这次重置放掉 ——
+     * 那是防止「清配额刷球」的必要保护。
+     *
+     * <p><b>已落地的产物不受影响。</b> 重置只释放「造物额度」，已经造出来的装备/召唤物还在，
+     * 不收回、不消失。代价是配额归零后玩家可以再堆一堆产物，但那是开发测试的自由。
+     */
+    private static int resetDevQuota(CommandSourceStack source) {
+        ServerPlayer self = source.getPlayer();
+        if (self == null) {
+            source.sendFailure(Component.literal("这个命令只能由玩家执行"));
+            return 0;
+        }
+        String ownerKey = PlayerStore.ownerKeyOf(self.getUUID());
+        QuotaManager.State before = OrbcraftRuntime.hatch().stateOf(ownerKey);
+        OrbcraftRuntime.hatch().restore(new HatchSnapshot(ownerKey, QuotaManager.State.empty(), List.of()));
+        source.sendSuccess(() -> Component.literal("配额已重置：统御力 " + before.usedPoints() + " → 0"
+                + "（已造产物不受影响，仅释放造物额度；在途的球仍占配额）"), true);
+        try {
+            Services.playerStore().markDirty(ownerKey);
+        } catch (IllegalStateException e) {
+            // 存档层没接线：内存里照样重置，只是这次不落盘。
+        }
+        return 1;
     }
 }

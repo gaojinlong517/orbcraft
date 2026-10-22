@@ -45,6 +45,21 @@ public final class OrbEntities {
                     .updateInterval(10)
                     .build(KEY));
 
+    /** 法杖 / 枪发射的魔法弹。与 {@link #PROJECTILE} 同属 MISC：纯玩家投射物，不参与刷怪。 */
+    public static final Identifier BOLT_ID = Identifier.fromNamespaceAndPath("orbcraft", "orb_bolt");
+
+    private static final ResourceKey<EntityType<?>> BOLT_KEY = ResourceKey.create(Registries.ENTITY_TYPE, BOLT_ID);
+
+    public static final EntityType<OrbBolt> BOLT = Registry.register(
+            BuiltInRegistries.ENTITY_TYPE,
+            BOLT_KEY,
+            EntityType.Builder.<OrbBolt>of(OrbBolt::new, MobCategory.MISC)
+                    // 弹丸比球更小：直线飞行，撞到方块边缘就该消散，不需要容错大碰撞箱。
+                    .sized(0.25F, 0.25F)
+                    .clientTrackingRange(4)
+                    .updateInterval(10)
+                    .build(BOLT_KEY));
+
     private OrbEntities() {
     }
 

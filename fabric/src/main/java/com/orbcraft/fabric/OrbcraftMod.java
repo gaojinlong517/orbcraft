@@ -56,6 +56,7 @@ public final class OrbcraftMod implements ModInitializer {
         VanillaSummonSpawner.init();
         CombatInit.init();
         com.orbcraft.fabric.equip.EquipmentCombat.init();
+        com.orbcraft.fabric.equip.EquipmentRules.init();
         ServerRules.init();
         OrbDevCommand.init();
         OrbBuildCommand.init();
